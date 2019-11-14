@@ -11,7 +11,7 @@ class HealthContributorRegistryBuilder
         $registry = new HealthContributorRegistry();
         $contributors = config('actuator.health.contributors');
         foreach ($contributors as $name => $contributor) {
-            $registry->register($name, new $contributor);
+            $registry->register($name, app($contributor));
         }
 
         return $registry;

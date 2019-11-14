@@ -2,6 +2,8 @@
 
 namespace Nwidart\Actuator\Tests\Health;
 
+use Illuminate\Foundation\Application;
+use Nwidart\Actuator\Health\HealthContributor;
 use Nwidart\Actuator\Health\HealthContributorRegistry;
 use Nwidart\Actuator\Health\HealthContributorRegistryBuilder;
 use Nwidart\Actuator\Health\StatusContributor;
@@ -30,5 +32,34 @@ class HealthContributorRegistryBuilderTest extends TestCase
         $registry = (new HealthContributorRegistryBuilder())->build();
 
         $this->assertCount(2, $registry->getAll());
+    }
+
+    /** @test */
+    public function it_can_build_dependencies(): void
+    {
+        $this->app['config']->set('actuator.health.contributors', [
+            'dummy' => DummyContributorWithDependencies::class,
+        ]);
+
+        $registry = (new HealthContributorRegistryBuilder())->build();
+
+        $this->assertCount(1, $registry->getAll());
+    }
+}
+
+class DummyContributorWithDependencies implements HealthContributor
+{
+    /**
+     * @var Application
+     */
+    private $app;
+
+    public function __construct(Application $app)
+    {
+        $this->app = $app;
+    }
+
+    public function run()
+    {
     }
 }
