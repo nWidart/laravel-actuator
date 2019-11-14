@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Health;
 
-interface HealthContributor
+use Nwidart\Actuator\Contributor;
+
+interface HealthContributor extends Contributor
 {
-    public function run();
 }
