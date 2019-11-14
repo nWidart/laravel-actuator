@@ -15,5 +15,4 @@ final class MemoryContributorTest extends TestCase
         $this->assertArrayHasKey('free', $memoryContributor->run());
         $this->assertArrayHasKey('memory', $memoryContributor->run());
     }
-
 }
