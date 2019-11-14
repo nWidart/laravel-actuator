@@ -1,7 +1,9 @@
 # Very short description of the package
 
 [![Latest Version on Packagist](https://img.shields.io/packagist/v/nwidart/laravel-actuator.svg?style=flat-square)](https://packagist.org/packages/nwidart/laravel-actuator)
+[![Software License](https://img.shields.io/badge/license-MIT-brightgreen.svg?style=flat-square)](LICENSE.md)
 [![Build Status](https://img.shields.io/travis/nwidart/laravel-actuator/master.svg?style=flat-square)](https://travis-ci.org/nwidart/laravel-actuator)
+[![Scrutinizer Coverage](https://img.shields.io/scrutinizer/coverage/g/nWidart/laravel-actuator.svg?maxAge=86400&style=flat-square)](https://scrutinizer-ci.com/g/nWidart/laravel-actuator/?branch=master)
 [![Quality Score](https://img.shields.io/scrutinizer/g/nwidart/laravel-actuator.svg?style=flat-square)](https://scrutinizer-ci.com/g/nwidart/laravel-actuator)
 [![Total Downloads](https://img.shields.io/packagist/dt/nwidart/laravel-actuator.svg?style=flat-square)](https://packagist.org/packages/nwidart/laravel-actuator)
 
