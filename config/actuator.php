@@ -6,6 +6,7 @@ use Nwidart\Actuator\Health\StatusContributor;
 
 return [
     'health' => [
+        'show-details' => false,
         'contributors' => [
             'status' => StatusContributor::class,
             'disk' => DiskSpaceContributor::class,

@@ -20,15 +20,22 @@ class HealthBuilder
     {
         $health = new Health();
 
-        $this->registry->getAll()->map(static function (HealthContributor $contributor, $name) use ($health) {
+        $this->registry->getAll()->map(function (HealthContributor $contributor, $name) use ($health) {
             if ($name === 'status') {
                 $health->status = $contributor->run();
 
                 return;
             }
-            $health->details[$name] = $contributor->run();
+            if ($this->detailsAreEnabled()) {
+                $health->details[$name] = $contributor->run();
+            }
         });
 
         return $health;
+    }
+
+    private function detailsAreEnabled(): bool
+    {
+        return (bool) config('actuator.health.show-details', false);
     }
 }

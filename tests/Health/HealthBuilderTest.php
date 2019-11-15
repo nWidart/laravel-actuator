@@ -36,8 +36,23 @@ final class HealthBuilderTest extends TestCase
     }
 
     /** @test */
+    public function it_hides_details_by_default(): void
+    {
+        $this->app['config']->set('actuator.health.contributors', [
+            'status' => StatusContributor::class,
+            'dummy' => DummyHealthContributor::class,
+        ]);
+        $builder = new HealthBuilder((new HealthContributorRegistryBuilder())->build());
+
+        $health = $builder->build();
+
+        $this->assertEquals([], $health->details);
+    }
+
+    /** @test */
     public function it_can_set_additional_contributors_in_details(): void
     {
+        $this->app['config']->set('actuator.health.show-details', true);
         $this->app['config']->set('actuator.health.contributors', [
             'status' => StatusContributor::class,
             'dummy' => DummyHealthContributor::class,
