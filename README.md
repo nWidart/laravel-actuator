@@ -23,6 +23,14 @@ You can install the package via composer:
 composer require nwidart/laravel-actuator
 ```
 
+The package will automatically register a service provider and alias.
+
+Optionally, publish the package's configuration file by running:
+
+``` bash
+php artisan vendor:publish --provider="Nwidart\Actuator\LaravelActuatorServiceProvider"
+```
+
 ## Usage
 
 New endpoints will be available:
