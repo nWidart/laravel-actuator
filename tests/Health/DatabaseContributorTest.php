@@ -51,5 +51,4 @@ final class DatabaseContributorTest extends TestCase
 
         $this->assertEquals(['database' => 'mysql'], $databaseContributor->run());
     }
-
 }

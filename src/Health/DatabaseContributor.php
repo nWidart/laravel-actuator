@@ -32,6 +32,7 @@ class DatabaseContributor implements HealthContributor
         } catch (PDOException $e) {
             return 'Not connected';
         }
+
         return [
             'database' => $this->config->get('database.default'),
         ];
