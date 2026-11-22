@@ -51,13 +51,13 @@ probe. Kubernetes waits for it before it runs the liveness probe:
 
 ## Choose what readiness checks
 
-By default, `readiness` checks only maintenance mode. Add the dependencies without which an instance
+By default, `readiness` checks maintenance mode and pending migrations. Add the dependencies without which an instance
 cannot serve any request, and that can fail for one instance but not the others:
 
 ```php title="config/actuator.php"
 'groups' => [
     'liveness' => ['include' => ['ping']],
-    'readiness' => ['include' => ['readinessState', 'diskSpace']],
+    'readiness' => ['include' => ['readinessState', 'migrations', 'diskSpace']],
 ],
 ```
 

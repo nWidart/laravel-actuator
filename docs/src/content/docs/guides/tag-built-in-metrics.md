@@ -39,14 +39,19 @@ works too: the package builds the registry on every request.
 | --------------------------------- | --------------------------------------------------------------------------- |
 | `http.server.request.duration`    | `Illuminate\Foundation\Http\Events\RequestHandled`                          |
 | `db.client.operation.duration`    | `Illuminate\Database\Events\QueryExecuted`                                  |
+| `laravel.db.transaction.duration` | `TransactionCommitted` or `TransactionRolledBack`                           |
+| `laravel.db.queries`              | `RequestHandled`, `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut`   |
+| `laravel.eloquent.models.pruned`  | `ModelsPruned`                                                              |
 | `messaging.process.duration`      | `JobProcessed`, `JobExceptionOccurred` or `JobTimedOut`                     |
 | `messaging.client.sent.messages`  | `JobQueued`                                                                 |
 | `laravel.cache.operations`        | The `Illuminate\Cache\Events\CacheEvent`                                    |
 | `laravel.scheduler.task.duration` | `ScheduledTaskFinished` or `ScheduledTaskFailed`                            |
 | `laravel.exceptions`              | The `Throwable`                                                             |
 
-The job events are in `Illuminate\Queue\Events`, and the scheduler events in
-`Illuminate\Console\Events`.
+The job events are in `Illuminate\Queue\Events`, the transaction and pruning events in
+`Illuminate\Database\Events`, and the scheduler events in `Illuminate\Console\Events`.
+`laravel.eloquent.models` takes no tags: its models are added up when the metrics are flushed, long
+after their events.
 
 ## Example: a module tag from a package
 

@@ -101,7 +101,8 @@ With `show_details` set to `always`:
     "ping": {"status": "UP"},
     "readinessState": {"status": "UP"},
     "diskSpace": {"status": "UP", "details": {"total": 494384795648, "free": 213212008448, "threshold": 10485760, "path": "/var/www", "exists": true}},
-    "db": {"status": "UP", "details": {"connection": "mysql", "database": "MySQL", "validationQuery": "select 1"}},
+    "db": {"status": "UP", "details": {"connection": "mysql", "database": "MySQL", "validationQuery": "select 1", "connections": 42, "maxConnections": 151}},
+    "migrations": {"status": "UP"},
     "cache": {"status": "UP", "details": {"store": "redis"}}
   },
   "groups": ["liveness", "readiness"]
@@ -121,7 +122,8 @@ An indicator that throws an exception reports `DOWN`, with the exception message
 | `ping`           | `PingHealthIndicator`            | Always `UP`.                                                          |
 | `readinessState` | `ReadinessStateHealthIndicator`  | `OUT_OF_SERVICE` in maintenance mode (`php artisan down`).            |
 | `diskSpace`      | `DiskSpaceHealthIndicator`       | `DOWN` when free space is below `threshold` bytes (default 10 MB).    |
-| `db`             | `DatabaseHealthIndicator`        | `DOWN` when `select 1` fails on the connection.                       |
+| `db`             | `DatabaseHealthIndicator`        | `DOWN` when `select 1` fails on the connection, or with `maxConnectionUsage` (e.g. `0.9`) when the server nears its connection limit. |
+| `migrations`     | `MigrationsHealthIndicator`      | `OUT_OF_SERVICE` while migrations have not run. In the `readiness` group. |
 | `cache`          | `CacheHealthIndicator`           | `DOWN` when a value cannot be written and read back.                  |
 | `redis`          | `RedisHealthIndicator`           | `DOWN` when `PING` fails. Disabled by default.                        |
 
@@ -270,17 +272,21 @@ Prometheus names follow the OpenTelemetry compatibility rules: dots become under
 |-----------------------------------|-------------------------------------------|
 | `http.server.request.duration`    | `http_server_request_duration_seconds`    |
 | `db.client.operation.duration`    | `db_client_operation_duration_seconds`    |
+| `laravel.db.transaction.duration` | `laravel_db_transaction_duration_seconds` |
+| `laravel.db.queries`              | `laravel_db_queries`                      |
+| `laravel.eloquent.models`         | `laravel_eloquent_models_total`           |
+| `laravel.eloquent.models.pruned`  | `laravel_eloquent_models_pruned_total`    |
 | `messaging.process.duration`      | `messaging_process_duration_seconds`      |
 | `messaging.client.sent.messages`  | `messaging_client_sent_messages_total`    |
 | `laravel.cache.operations`        | `laravel_cache_operations_total`          |
 | `laravel.scheduler.task.duration` | `laravel_scheduler_task_duration_seconds` |
 | `laravel.exceptions`              | `laravel_exceptions_total`                |
 
-These are read during the scrape and never stored: `laravel.info`, `php.opcache.*`, `php.fpm.*`, `system.cpu.load_average.1m` and `system.filesystem.usage`. The [laravel-metrics README](https://github.com/nWidart/laravel-metrics#built-in-instrumentation) lists the attributes of each metric. Turn groups off, change the store, ignore more routes and add labels to every sample in `config/metrics.php` (`php artisan vendor:publish --tag=metrics-config`).
+These are read during the scrape and never stored: `laravel.info`, `php.opcache.*`, `php.fpm.*`, `system.cpu.load_average.1m`, `system.filesystem.usage`, `laravel.db.server.connections`, `laravel.db.server.connections.max` and `laravel.db.migrations.pending`. The [laravel-metrics README](https://github.com/nWidart/laravel-metrics#built-in-instrumentation) lists the attributes of each metric. Turn groups off, change the store, ignore more routes and add labels to every sample in `config/metrics.php` (`php artisan vendor:publish --tag=metrics-config`).
 
 With a shared store, every server returns the totals of the whole application: scrape one address, not each server. `php artisan actuator:metrics:clear` empties the store.
 
-A [sample Grafana dashboard](https://nwidart.github.io/laravel-actuator/guides/grafana-dashboard/) shows the built-in metrics: requests, queries, jobs, cache, scheduled tasks, exceptions and the PHP runtime. Import it, or use it as a starting point.
+A [sample Grafana dashboard](https://nwidart.github.io/laravel-actuator/guides/grafana-dashboard/) shows the built-in metrics: requests, queries, transactions, Eloquent models, jobs, cache, scheduled tasks, exceptions, the database server and the PHP runtime. Import it, or use it as a starting point.
 
 ### Custom metrics
 

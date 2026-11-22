@@ -2,11 +2,20 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
-## Unreleased
+## 1.3.0 - 2026-11-22
 
 ### Added
 
 - A sample Grafana dashboard for the built-in metrics, in `docs/public/grafana/laravel-actuator.json`. See the [guide](https://nwidart.github.io/laravel-actuator/guides/grafana-dashboard/).
+- `MigrationsHealthIndicator`, named `migrations`: `OUT_OF_SERVICE` while migrations have not run, with their names in the `pending` detail, and `UNKNOWN` when the migrations table cannot be read. It is in the default indicators and in the default `readiness` group, so new instances get no traffic before `php artisan migrate` has run.
+- `DatabaseHealthIndicator` shows the `connections` open on the server and its `maxConnections`, on MySQL, MariaDB and PostgreSQL. With `maxConnectionUsage` (e.g. `0.9`), it is `DOWN` once the open connections reach that share of the limit.
+- The database and Eloquent metrics of laravel-metrics 0.3: `laravel.db.transaction.duration`, `laravel.db.queries`, `laravel.eloquent.models`, `laravel.eloquent.models.pruned` and, read during the scrape, `laravel.db.server.connections`, `laravel.db.server.connections.max` and `laravel.db.migrations.pending`.
+
+### Changed
+
+- Requires nwidart/laravel-metrics `^0.3`.
+- The sample Grafana dashboard shows the new database and Eloquent metrics in its Database row. Its "Queries per request" panel becomes "p95 queries per request, top routes", from `laravel.db.queries`.
+- Without a published `config/actuator.php`, `/actuator/health` and `/actuator/health/readiness` now answer `OUT_OF_SERVICE` (HTTP 503) while migrations are pending. A published configuration keeps its own indicators and groups: add `'migrations' => MigrationsHealthIndicator::class` to `health.indicators`, and `migrations` to the `readiness` group, to get the check.
 
 ## 1.2.0 - 2026-11-22
 

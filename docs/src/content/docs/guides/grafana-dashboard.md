@@ -43,7 +43,7 @@ providers:
 | ---------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Overview               | Request rate, share of 5xx responses, p95 request duration, exceptions, failed job attempts, cache hit ratio, versions | All                                                                |
 | HTTP requests          | Requests by route and by status class, duration percentiles, slowest routes, a table of every route | `http_server_request_duration_seconds`                             |
-| Database               | Queries by operation, p95 query duration by database, queries per request                   | `db_client_operation_duration_seconds`                             |
+| Database               | Queries by operation, p95 query duration by database, p95 queries per request by route, transactions by result and their p95 duration, Eloquent models by event, the most retrieved models, server connections and their limit, pending migrations | `db_client_operation_duration_seconds`, `laravel_db_queries`, `laravel_db_transaction_duration_seconds`, `laravel_eloquent_models_total`, `laravel_db_server_connections`, `laravel_db_migrations_pending` |
 | Queues                 | Jobs dispatched and processed by queue, failed attempts by job, p95 job duration, a table of every job | `messaging_process_duration_seconds`, `messaging_client_sent_messages_total` |
 | Cache                  | Hit ratio by store, operations by result                                                    | `laravel_cache_operations_total`                                   |
 | Scheduled tasks        | A table of runs, failures and average duration by task, average duration over time          | `laravel_scheduler_task_duration_seconds`                          |
@@ -60,8 +60,11 @@ application, or keep **All** to add them up.
 
 - The percentiles are estimated from the histogram buckets: 5 ms to 10 s for requests and jobs,
   1 ms to 10 s for queries. A p99 above 10 s shows as 10 s.
-- **Queries per request** divides every query by every request. Queries of queued jobs and commands
-  count too, so read it as a trend: a jump often means an N+1 query.
+- **p95 queries per request** reads `laravel.db.queries`, the queries each request ran, by route. A
+  route at the top of the list often has an N+1 query.
+- **Database server connections** and **Pending migrations** are read during the scrape, like the
+  PHP runtime row. The connections count every client of the database server, not only this
+  application.
 - **Jobs dispatched and processed** counts each attempt as processed. A queue that shows more
   dispatched than processed jobs for a while is growing.
 - The scheduled task duration is averaged over 10 minute windows, because most tasks run at most once

@@ -123,12 +123,15 @@ METRICS_RUNTIME=false
 | Variable             | Turns off                                                        |
 | -------------------- | ---------------------------------------------------------------- |
 | `METRICS_HTTP`       | `http.server.request.duration`                                   |
-| `METRICS_DB`         | `db.client.operation.duration`                                   |
+| `METRICS_DB`         | `db.client.operation.duration`, `laravel.db.transaction.duration`, `laravel.db.queries` |
+| `METRICS_ELOQUENT`   | `laravel.eloquent.models`, `laravel.eloquent.models.pruned`      |
 | `METRICS_QUEUE`      | `messaging.process.duration`, `messaging.client.sent.messages`   |
 | `METRICS_CACHE`      | `laravel.cache.operations`                                       |
 | `METRICS_SCHEDULER`  | `laravel.scheduler.task.duration`                                |
 | `METRICS_EXCEPTIONS` | `laravel.exceptions`                                             |
 | `METRICS_RUNTIME`    | `laravel.info`, `php.opcache.*`, `php.fpm.*`, `system.*`         |
+| `METRICS_DB_SERVER`  | `laravel.db.server.connections`, `laravel.db.server.connections.max` |
+| `METRICS_MIGRATIONS` | `laravel.db.migrations.pending`                                  |
 
 To leave more routes out of `http.server.request.duration`, add them to `ignore_routes` in
 `config/metrics.php`. A pattern that starts with `/` matches the URI template, such as `/up`. Any

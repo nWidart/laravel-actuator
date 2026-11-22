@@ -44,6 +44,17 @@ To make this work, the package lets requests under the actuator base path throug
 Without that, the probe would receive Laravel's HTML maintenance page. It would still see a 503, but
 monitoring tools could no longer read the status.
 
+## Why readiness checks pending migrations
+
+The default `readiness` group also contains `migrations`, which reports `OUT_OF_SERVICE` while
+migrations have not run. During a rolling deploy, new instances can start before
+`php artisan migrate` has run. Their code expects tables and columns the database does not have
+yet. They stay out of rotation until the migrations have run, and the old instances keep serving.
+
+The indicator reads the database, so it reports `UNKNOWN` instead of `DOWN` when the database
+cannot be reached. A database outage is a shared failure (see below): it does not make every
+instance unready at once.
+
 ## Should readiness check the database?
 
 It depends on whether the failure is local or shared.
