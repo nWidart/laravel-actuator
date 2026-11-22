@@ -257,12 +257,12 @@ curl http://localhost/actuator/prometheus
 ```text
 # HELP http_server_request_duration_seconds Duration of HTTP server requests.
 # TYPE http_server_request_duration_seconds histogram
-http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.1"} 3
-http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
-http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.1"} 3
+http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
+http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
 ```
 
-Prometheus names follow the OpenTelemetry compatibility rules: dots become underscores, the unit is appended (`_seconds`, `_bytes`), and a counter ends in `_total`. Every sample has an `otel_scope_name` label. Requests to the actuator routes are not recorded.
+Prometheus names follow the OpenTelemetry compatibility rules: dots become underscores, the unit is appended (`_seconds`, `_bytes`), and a counter ends in `_total`. Every sample has an `otel_scope_name` label. Requests to the actuator routes are left out of `http.server.request.duration`.
 
 ### Built-in metrics
 

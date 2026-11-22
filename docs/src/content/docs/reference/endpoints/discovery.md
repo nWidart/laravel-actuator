@@ -11,7 +11,8 @@ Lists links to the exposed endpoints.
 | Route name    | `actuator.discovery`                        |
 | Exposure      | Always registered                           |
 | Middleware    | `middleware`                                |
-| Controller    | `Nwidart\Actuator\Http\Controllers\DiscoveryController` |
+| Configuration | [`base_path`](/laravel-actuator/reference/configuration/#base_path), [`middleware`](/laravel-actuator/reference/configuration/#middleware) |
+| Class         | `Nwidart\Actuator\Http\Controllers\DiscoveryController` |
 
 ## Response
 

@@ -21,7 +21,7 @@ Boot. Underneath, each meter is an OpenTelemetry instrument.
 
 A **meter** measures one thing. It has a dotted name, such as `orders.placed`, and **tags**: pairs
 of a name and a value, such as `channel=web`. The same name with other tag values is another series
-of the same meter. OpenTelemetry calls tags attributes.
+of the same meter. OpenTelemetry calls tags attributes, and Prometheus calls them labels.
 
 | Meter type           | Measures                                          | OpenTelemetry instrument | Example                  |
 | -------------------- | ------------------------------------------------- | ------------------------ | ------------------------ |
@@ -37,7 +37,8 @@ The built-in metrics use the names of the
 
 The names are not those of a monitoring system. `http.server.request.duration` becomes
 `http_server_request_duration_seconds` only when the `prometheus` endpoint renders it. The same
-metrics can be pushed over OTLP with the `metrics:push` command of laravel-metrics.
+metrics can be pushed over OTLP with the
+[`metrics:push` command](https://github.com/nWidart/laravel-metrics#otlp-push) of laravel-metrics.
 
 ## Why a store
 

@@ -20,7 +20,9 @@ final class Actuator
 
 | Rule             | Description                                                                                         |
 | ---------------- | --------------------------------------------------------------------------------------------------- |
-| Where to call    | In `register()` or `boot()` of a service provider. `register()` is preferred.                       |
+| Where to call    | In `register()` or `boot()` of a service provider.                                                  |
+| In `register()`  | The endpoint exists when the actuator provider registers its routes, whatever the boot order of the providers. |
+| In `boot()`      | When the actuator provider has already booted, the routes of the endpoint are registered at that moment, after the routes of every provider that booted in between. A catch-all route among those wins over the endpoint. |
 | Provider order   | Not relevant. The call works before and after the actuator provider is registered.                  |
 | After boot       | A call after the application has booted throws `LogicException`.                                    |
 | Exposure         | Registration does not expose the endpoint. See [exposure](#exposure-and-middleware).                |

@@ -31,7 +31,14 @@ It takes about fifteen minutes. You need PHP 8.2 or later, Composer and `curl`.
    composer require nwidart/laravel-actuator
    ```
 
-3. Start the development server:
+3. Laravel Actuator also records metrics, and keeps them in Redis. Our new application has no
+   Redis, so we keep them in the cache. Add this line to the `.env` file:
+
+   ```ini title=".env"
+   METRICS_STORE=cache
+   ```
+
+4. Start the development server:
 
    ```bash
    php artisan serve

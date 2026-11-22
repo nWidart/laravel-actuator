@@ -208,18 +208,13 @@ provider is registered.
 ## Prefer `register()` over `boot()`
 
 `Actuator::endpoint()` works in the `register()` and in the `boot()` method of a service provider.
-Prefer `register()`:
+Call it in `register()`: the endpoint then exists when the actuator provider adds its routes,
+whatever the boot order of the providers. This matters most for a package that loads other
+providers itself, as a module system does, because it can change when their `boot()` runs.
 
-- Laravel calls `register()` on every provider before it calls `boot()` on any. An endpoint
-  registered in `register()` always exists when the actuator provider adds its routes, so the
-  result does not depend on the boot order of the providers.
-- An endpoint registered in `boot()` after the actuator provider has booted gets its routes at that
-  moment, later than the other actuator routes. If a provider that booted in between added a
-  catch-all route, that route wins.
-- A package that loads other providers itself, as a module system does, can change when their
-  `boot()` runs. `register()` keeps the endpoint independent of that.
-
-A call after the application has booted, for example in a controller, throws a `LogicException`.
+The [registration rules](/laravel-actuator/reference/custom-endpoints/#registration) describe what
+a call in `boot()` changes. A call after the application has booted, for example in a controller,
+throws a `LogicException`.
 
 ## Test the endpoint
 

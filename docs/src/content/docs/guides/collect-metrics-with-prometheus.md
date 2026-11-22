@@ -15,7 +15,8 @@ laravel-metrics records from the moment it is installed, whether or not the endp
 Each request, job and command writes what it recorded to a store, once, when it ends. The default
 store is the `default` Redis connection.
 
-Without Redis, for development, use a Laravel cache store:
+Without Redis, the measurements are dropped, and a warning goes to the PHP error log. For
+development without Redis, use a Laravel cache store:
 
 ```ini title=".env"
 METRICS_STORE=cache
@@ -44,18 +45,20 @@ curl http://localhost/actuator/prometheus
 ```text
 # HELP http_server_request_duration_seconds Duration of HTTP server requests.
 # TYPE http_server_request_duration_seconds histogram
-http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.005"} 0
-http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.01"} 3
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.005"} 0
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.01"} 3
 ...
-http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
-http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
+http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
+http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
 # HELP laravel_info Laravel and PHP versions of the process that exports the metrics.
 # TYPE laravel_info gauge
 laravel_info{laravel_version="13.43.0",otel_scope_name="nwidart/laravel-metrics",php_sapi="fpm-fcgi",process_runtime_name="php",process_runtime_version="8.4.27"} 1
 ```
 
-Requests to the actuator endpoints are not recorded, so probes and scrapes do not drown your own
-traffic. See the [metrics reference](/laravel-actuator/reference/metrics/) for every metric.
+Requests to the actuator endpoints are left out of `http.server.request.duration`, so probes and
+scrapes do not drown your own traffic. The queries and cache operations of the health indicators
+are still recorded. See the [metrics reference](/laravel-actuator/reference/metrics/) for every
+metric.
 
 ## Configure Prometheus
 

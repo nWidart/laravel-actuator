@@ -12,6 +12,7 @@ Returns the metrics of the application for a Prometheus server.
 | Route name    | `actuator.prometheus`                                          |
 | Exposure      | Not exposed by default                                         |
 | Middleware    | `middleware`, then `prometheus.middleware`                     |
+| Configuration | [`prometheus`](/laravel-actuator/reference/configuration/#prometheus), [`metrics`](/laravel-actuator/reference/configuration/#metrics) |
 | Class         | `Nwidart\Actuator\Http\Controllers\PrometheusController`       |
 
 The endpoint serves the metrics of [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme):
@@ -43,10 +44,10 @@ Each metric becomes a metric family. Families are sorted by name.
 ```text
 # HELP http_server_request_duration_seconds Duration of HTTP server requests.
 # TYPE http_server_request_duration_seconds histogram
-http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.005"} 0
-http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="+Inf"} 3
-http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
-http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.005"} 0
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="+Inf"} 3
+http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
+http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
 # HELP orders_placed_total Orders placed, by sales channel.
 # TYPE orders_placed_total counter
 orders_placed_total{channel="web",otel_scope_name="nwidart/laravel-actuator"} 12

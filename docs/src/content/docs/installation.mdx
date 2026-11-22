@@ -9,8 +9,8 @@ import { Steps } from '@astrojs/starlight/components';
 
 - PHP 8.2 or later
 - Laravel 12 or 13
-- For the metrics in production, and for the optional Redis indicator: the `phpredis` extension or
-  the `predis/predis` package
+- For the metrics in production: a Redis server, with the `phpredis` extension or the
+  `predis/predis` package. The optional Redis indicator needs the same client.
 
 ## Install the package
 
@@ -27,7 +27,8 @@ import { Steps } from '@astrojs/starlight/components';
 
    Composer also installs [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
    which records the metrics. It starts at once, into the `default` Redis connection. Without Redis,
-   set `METRICS_STORE=cache` to use a cache store, or `METRICS_ENABLED=false` to record nothing. See
+   the application keeps working, but its requests write a warning to the PHP error log. Set
+   `METRICS_STORE=cache` to use a cache store, or `METRICS_ENABLED=false` to record nothing. See
    [choose a metrics store](/laravel-actuator/guides/choose-a-metrics-store/).
 
 2. Check that the health endpoint answers:

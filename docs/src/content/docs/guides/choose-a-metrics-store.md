@@ -47,8 +47,12 @@ Metrics never break the work they measure.
 
 | Failure                         | Result                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------- |
-| A write fails                   | The measurements are dropped and the failure is logged. The request, job or command goes on. |
-| A read fails during a scrape    | The endpoint answers HTTP 503, and Prometheus marks the target as down. |
+| A write fails                   | The measurements are dropped. The request, job or command goes on. OpenTelemetry writes a warning to the PHP error log, not to the Laravel log. |
+| A read fails during a scrape    | The endpoint answers HTTP 503, and Prometheus marks the target as down. The exception is reported. |
+| The store cannot be built, such as an unknown `METRICS_STORE` | The exception is reported and nothing is recorded. The request, job or command goes on. The endpoint answers HTTP 503. |
+
+An application without Redis, and without `METRICS_STORE=cache`, fails each write: its requests
+keep working, and each one that recorded something writes the warning.
 
 ## Clear the store
 

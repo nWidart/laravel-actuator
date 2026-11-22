@@ -8,10 +8,10 @@ which Laravel Actuator requires. They use the names of the OpenTelemetry semanti
 laravel-metrics README lists the attributes of each metric and what it leaves out. This page sums
 them up.
 
-Turn a group of metrics off in `config/metrics.php`, under `instrumentation`. Publish that file with
-`php artisan vendor:publish --tag=metrics-config`. The
-[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) key of
-`config/actuator.php` does not apply to these metrics.
+The Switch column names the key of `config/metrics.php`, under `instrumentation`, that turns a
+group of metrics off, with its environment variable. `php artisan vendor:publish --tag=metrics-config`
+publishes that file. The [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable)
+key of `config/actuator.php` does not apply to these metrics.
 
 ## Recorded metrics
 
@@ -38,9 +38,12 @@ commands. They are kept in the store of laravel-metrics.
 | `laravel.scheduler.task.duration` | `laravel.scheduler.task.name`, `error.type`                                  |
 | `laravel.exceptions`              | `exception.type`                                                             |
 
-`http.route` is the route template, such as `/users/{user}`, never the raw path. Requests to the
-actuator routes are not recorded: Laravel Actuator adds `actuator.*` to `metrics.ignore_routes`.
-Add your own patterns there, such as `/up` or `horizon.*`.
+`http.route` is the route template, such as `/users/{user}`, never the raw path.
+
+Requests to the actuator routes are left out of `http.server.request.duration`: Laravel Actuator
+adds `actuator.*` to `metrics.ignore_routes`. That key also takes your own patterns, such as `/up`
+or `horizon.*`. It applies to no other metric: the queries and cache operations that a health
+indicator runs are recorded in `db.client.operation.duration` and `laravel.cache.operations`.
 
 The histograms have buckets out of the box: 5 ms to 10 s for requests and jobs, 1 ms to 10 s for
 queries, and 100 ms to 15 min for scheduled tasks.
@@ -77,7 +80,7 @@ another short-lived process, so these values would not form a series.
 Every sample has the `otel_scope_name` label. It is `nwidart/laravel-metrics` for the metrics on
 this page, and `nwidart/laravel-actuator` for the meters you create with `MeterRegistry`.
 
-Add your own labels to every sample with `prometheus.labels` in `config/metrics.php`:
+`prometheus.labels` in `config/metrics.php` adds your own labels to every sample:
 
 ```php title="config/metrics.php"
 'prometheus' => [

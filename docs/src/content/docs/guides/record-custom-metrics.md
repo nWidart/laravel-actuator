@@ -207,9 +207,14 @@ public function test_an_order_is_counted(): void
 [testing](https://github.com/nWidart/laravel-metrics#testing) in the laravel-metrics README.
 
 A meter with a callback is not recorded, so the fake does not hold it. To test one, expose
-`prometheus` in the test environment and read the endpoint:
+`prometheus` and read the endpoint. Call `Metrics::fake()` first: the endpoint then reads the fake
+store. Without it, the endpoint reads the real store, and answers HTTP 503 when the test
+environment has no Redis:
 
 ```php
+Metrics::fake();
+
 $this->get('/actuator/prometheus')
+    ->assertOk()
     ->assertSee('queue_size{otel_scope_name="nwidart/laravel-actuator",queue="default"} 0', false);
 ```
