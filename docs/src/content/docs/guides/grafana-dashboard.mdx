@@ -3,11 +3,20 @@ title: Use the sample Grafana dashboard
 description: Import a ready-made Grafana dashboard for the built-in metrics, then adapt it to your application.
 ---
 
+import ImageLightbox from '../../../components/ImageLightbox.astro';
+import dashboardPreview from '../../../assets/grafana-dashboard.png';
+import dashboardFull from '../../../assets/grafana-dashboard-full.png';
+
 Laravel Actuator comes with a sample [Grafana](https://grafana.com) dashboard for the
 [built-in metrics](/laravel-actuator/reference/metrics/). Import it as it is, or use it as a starting
 point for your own.
 
-![The sample dashboard, with requests, queries, jobs and cache operations of a demo application](../../../assets/grafana-dashboard.png)
+<ImageLightbox
+	preview={dashboardPreview}
+	full={dashboardFull}
+	alt="The sample dashboard with the traffic of a demo shop application: requests, queries, queued jobs, cache operations, scheduled tasks and exceptions"
+	label="Show the whole dashboard"
+/>
 
 ## Before you start
 

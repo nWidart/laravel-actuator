@@ -7,6 +7,8 @@ All notable changes to `laravel-actuator` will be documented in this file.
 ### Fixed
 
 - A health indicator whose class cannot be resolved (it does not exist, or a constructor dependency cannot be built) reports `DOWN` with the exception in its `error` detail, and logs a warning. The health endpoint no longer fails with HTTP 500 and still reports the other components.
+- The "Database server connections" panel of the sample Grafana dashboard shows a count of connections, not operations per second.
+- The screenshot of the sample Grafana dashboard in the docs shows the panels. It was blank. Click it to see the whole dashboard.
 
 ## 1.3.0 - 2026-11-22
 
