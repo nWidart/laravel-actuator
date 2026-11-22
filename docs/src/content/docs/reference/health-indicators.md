@@ -162,7 +162,8 @@ Sends `PING` to a Redis connection. Requires the `phpredis` extension or `predis
 
 ## Error detail
 
-Any indicator that throws reports `DOWN` with one detail:
+An indicator that throws, or whose class the container cannot resolve, reports `DOWN` with one
+detail:
 
 | Detail  | Type   | Description                                      |
 | ------- | ------ | ------------------------------------------------ |

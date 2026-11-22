@@ -2,6 +2,12 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
+## Unreleased
+
+### Fixed
+
+- A health indicator whose class cannot be resolved (it does not exist, or a constructor dependency cannot be built) reports `DOWN` with the exception in its `error` detail, and logs a warning. The health endpoint no longer fails with HTTP 500 and still reports the other components.
+
 ## 1.3.0 - 2026-11-22
 
 ### Added
