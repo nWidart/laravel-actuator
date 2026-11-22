@@ -22,7 +22,7 @@ Keys you do not publish keep their default values.
 | `health.middleware`              | list of strings         | `[]`                                     |                                |
 | `health.show_details`            | visibility              | `'never'`                                | `ACTUATOR_HEALTH_SHOW_DETAILS` |
 | `health.show_components`         | visibility or `null`    | `null`                                   |                                |
-| `health.indicators`              | map of definitions      | `ping`, `readinessState`, `diskSpace`, `db`, `cache` |                    |
+| `health.indicators`              | map of definitions      | `ping`, `readinessState`, `diskSpace`, `db`, `migrations`, `cache` |      |
 | `health.groups`                  | map of groups           | `liveness`, `readiness`                  |                                |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.contributors`              | map of definitions      | `app`, `git`, `php`, `os`, `process`     |                                |
@@ -127,6 +127,7 @@ Map of component name to indicator [definition](#definitions). The class must im
     'readinessState' => ReadinessStateHealthIndicator::class,
     'diskSpace' => DiskSpaceHealthIndicator::class,
     'db' => DatabaseHealthIndicator::class,
+    'migrations' => MigrationsHealthIndicator::class,
     'cache' => CacheHealthIndicator::class,
     // 'redis' => RedisHealthIndicator::class,
 ],
@@ -143,7 +144,7 @@ Map of group name to group settings.
 ```php
 'groups' => [
     'liveness' => ['include' => ['ping']],
-    'readiness' => ['include' => ['readinessState']],
+    'readiness' => ['include' => ['readinessState', 'migrations']],
 ],
 ```
 

@@ -101,7 +101,8 @@ With `show_details` set to `always`:
     "ping": {"status": "UP"},
     "readinessState": {"status": "UP"},
     "diskSpace": {"status": "UP", "details": {"total": 494384795648, "free": 213212008448, "threshold": 10485760, "path": "/var/www", "exists": true}},
-    "db": {"status": "UP", "details": {"connection": "mysql", "database": "MySQL", "validationQuery": "select 1"}},
+    "db": {"status": "UP", "details": {"connection": "mysql", "database": "MySQL", "validationQuery": "select 1", "connections": 42, "maxConnections": 151}},
+    "migrations": {"status": "UP"},
     "cache": {"status": "UP", "details": {"store": "redis"}}
   },
   "groups": ["liveness", "readiness"]
@@ -121,7 +122,8 @@ An indicator that throws an exception reports `DOWN`, with the exception message
 | `ping`           | `PingHealthIndicator`            | Always `UP`.                                                          |
 | `readinessState` | `ReadinessStateHealthIndicator`  | `OUT_OF_SERVICE` in maintenance mode (`php artisan down`).            |
 | `diskSpace`      | `DiskSpaceHealthIndicator`       | `DOWN` when free space is below `threshold` bytes (default 10 MB).    |
-| `db`             | `DatabaseHealthIndicator`        | `DOWN` when `select 1` fails on the connection.                       |
+| `db`             | `DatabaseHealthIndicator`        | `DOWN` when `select 1` fails on the connection, or with `maxConnectionUsage` (e.g. `0.9`) when the server nears its connection limit. |
+| `migrations`     | `MigrationsHealthIndicator`      | `OUT_OF_SERVICE` while migrations have not run. In the `readiness` group. |
 | `cache`          | `CacheHealthIndicator`           | `DOWN` when a value cannot be written and read back.                  |
 | `redis`          | `RedisHealthIndicator`           | `DOWN` when `PING` fails. Disabled by default.                        |
 

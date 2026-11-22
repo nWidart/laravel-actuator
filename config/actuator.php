@@ -3,6 +3,7 @@
 use Nwidart\Actuator\Health\Indicators\CacheHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\DatabaseHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\DiskSpaceHealthIndicator;
+use Nwidart\Actuator\Health\Indicators\MigrationsHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\PingHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\ReadinessStateHealthIndicator;
 use Nwidart\Actuator\Info\Contributors\AppInfoContributor;
@@ -81,7 +82,11 @@ return [
             'ping' => PingHealthIndicator::class,
             'readinessState' => ReadinessStateHealthIndicator::class,
             'diskSpace' => DiskSpaceHealthIndicator::class,
+            // DOWN near the server's connection limit, e.g. at 90%:
+            // [DatabaseHealthIndicator::class, ['maxConnectionUsage' => 0.9]]
             'db' => DatabaseHealthIndicator::class,
+            // OUT_OF_SERVICE while migrations have not run.
+            'migrations' => MigrationsHealthIndicator::class,
             'cache' => CacheHealthIndicator::class,
             // 'redis' => Nwidart\Actuator\Health\Indicators\RedisHealthIndicator::class,
         ],
@@ -90,7 +95,7 @@ return [
         // may override "show_details" and "show_components".
         'groups' => [
             'liveness' => ['include' => ['ping']],
-            'readiness' => ['include' => ['readinessState']],
+            'readiness' => ['include' => ['readinessState', 'migrations']],
         ],
     ],
 
