@@ -7,3 +7,4 @@
 /CONTRIBUTING.md    export-ignore
 /phpstan.neon.dist  export-ignore
 /phpunit.xml.dist   export-ignore
+/docs               export-ignore

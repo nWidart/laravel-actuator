@@ -7,6 +7,8 @@
 
 Production-ready endpoints to monitor your Laravel application: health checks for Kubernetes probes and load balancers, build and runtime info, configuration, routes and scheduled tasks.
 
+**Documentation: [nwidart.github.io/laravel-actuator](https://nwidart.github.io/laravel-actuator/)**
+
 The endpoints follow [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html): same paths, same status semantics and, for `health`, `info`, `env` and `scheduledtasks`, the same JSON format. The aim is that tools built for Spring Boot Actuator, such as [Spring Boot Admin](https://github.com/codecentric/spring-boot-admin), can read them.
 
 ## Requirements

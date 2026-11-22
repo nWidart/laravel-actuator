@@ -1,0 +1,282 @@
+---
+title: 'Tutorial: your first health check'
+description: Install Laravel Actuator in a new Laravel application, read its health, watch it react to maintenance mode, and write a custom health indicator.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+In this tutorial, we install Laravel Actuator in a new Laravel application. We read the health of
+the application, put it in maintenance mode to see the readiness probe react, and write a health
+indicator of our own that watches the queue.
+
+It takes about fifteen minutes. You need PHP 8.2 or later, Composer and `curl`.
+
+## Create an application
+
+<Steps>
+
+1. Create a new Laravel application and go into its directory:
+
+   ```bash
+   composer create-project laravel/laravel actuator-demo
+   cd actuator-demo
+   ```
+
+   The new application uses SQLite for its database, cache and queue. Composer creates the
+   database file and runs the migrations for us.
+
+2. Install Laravel Actuator:
+
+   ```bash
+   composer require nwidart/laravel-actuator
+   ```
+
+3. Start the development server:
+
+   ```bash
+   php artisan serve
+   ```
+
+   Leave it running, and open a second terminal in the same directory for the next commands.
+
+</Steps>
+
+## Discover the endpoints
+
+Ask the actuator what it offers:
+
+```bash
+curl http://127.0.0.1:8000/actuator
+```
+
+```json
+{
+  "_links": {
+    "self": { "href": "http://127.0.0.1:8000/actuator", "templated": false },
+    "health": { "href": "http://127.0.0.1:8000/actuator/health", "templated": false },
+    "health-path": { "href": "http://127.0.0.1:8000/actuator/health/{*path}", "templated": true }
+  }
+}
+```
+
+Only `health` is listed. The other endpoints exist, but they are not exposed until we ask for them.
+
+## Read the health
+
+```bash
+curl http://127.0.0.1:8000/actuator/health
+```
+
+```json
+{ "status": "UP", "groups": ["liveness", "readiness"] }
+```
+
+The application is `UP`. We see no detail about _why_ it is up. That is deliberate: the endpoint is
+public, so it hides its details by default.
+
+Let us show the details on our machine. Add this line to the `.env` file:
+
+```ini title=".env"
+ACTUATOR_HEALTH_SHOW_DETAILS=always
+```
+
+Stop the server with <kbd>Ctrl</kbd>+<kbd>C</kbd>, start it again with `php artisan serve`, and
+repeat the request:
+
+```bash
+curl http://127.0.0.1:8000/actuator/health
+```
+
+```json
+{
+  "status": "UP",
+  "components": {
+    "ping": { "status": "UP" },
+    "readinessState": { "status": "UP" },
+    "diskSpace": {
+      "status": "UP",
+      "details": {
+        "total": 494384795648,
+        "free": 213212008448,
+        "threshold": 10485760,
+        "path": "/home/you/actuator-demo",
+        "exists": true
+      }
+    },
+    "db": {
+      "status": "UP",
+      "details": { "connection": "sqlite", "database": "SQLite", "validationQuery": "select 1" }
+    },
+    "cache": { "status": "UP", "details": { "store": "database" } }
+  },
+  "groups": ["liveness", "readiness"]
+}
+```
+
+Your disk figures and path are different. Each entry under `components` is a **health indicator**.
+The overall `status` is the most severe status of all components.
+
+## Watch the readiness probe
+
+The `groups` list names two health groups. Each group checks a subset of the indicators. Read the
+`readiness` group:
+
+```bash
+curl -i http://127.0.0.1:8000/actuator/health/readiness
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"UP","components":{"readinessState":{"status":"UP"}}}
+```
+
+Now put the application in maintenance mode, and ask again:
+
+```bash
+php artisan down
+curl -i http://127.0.0.1:8000/actuator/health/readiness
+```
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json
+
+{"status":"OUT_OF_SERVICE","components":{"readinessState":{"status":"OUT_OF_SERVICE"}}}
+```
+
+The status is `OUT_OF_SERVICE`, and the HTTP status is 503. A load balancer or Kubernetes stops
+sending traffic to this instance. Now ask the `liveness` group:
+
+```bash
+curl -i http://127.0.0.1:8000/actuator/health/liveness
+```
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"UP","components":{"ping":{"status":"UP"}}}
+```
+
+Liveness stays `UP`, so nothing restarts the instance. Notice also that the actuator still answers
+in JSON, while the rest of the application shows the maintenance page.
+
+Bring the application back:
+
+```bash
+php artisan up
+```
+
+## Write a health indicator
+
+The built-in indicators do not know about our queue. Let us write an indicator that reports `DOWN`
+when too many jobs wait in the `jobs` table.
+
+<Steps>
+
+1. Create the file `app/Health/QueueBacklogHealthIndicator.php`:
+
+   ```php title="app/Health/QueueBacklogHealthIndicator.php"
+   <?php
+
+   namespace App\Health;
+
+   use Illuminate\Support\Facades\DB;
+   use Nwidart\Actuator\Health\Health;
+   use Nwidart\Actuator\Health\HealthIndicator;
+
+   final class QueueBacklogHealthIndicator implements HealthIndicator
+   {
+       public function __construct(private int $threshold = 100) {}
+
+       public function health(): Health
+       {
+           $pending = DB::table('jobs')->count();
+           $details = ['pending' => $pending, 'threshold' => $this->threshold];
+
+           return $pending < $this->threshold
+               ? Health::up($details)
+               : Health::down($details);
+       }
+   }
+   ```
+
+2. Publish the configuration file:
+
+   ```bash
+   php artisan vendor:publish --tag=actuator-config
+   ```
+
+3. Open `config/actuator.php` and add the indicator to `health.indicators`:
+
+   ```php title="config/actuator.php" ins={6}
+   'indicators' => [
+       'ping' => PingHealthIndicator::class,
+       'readinessState' => ReadinessStateHealthIndicator::class,
+       'diskSpace' => DiskSpaceHealthIndicator::class,
+       'db' => DatabaseHealthIndicator::class,
+       'queue' => App\Health\QueueBacklogHealthIndicator::class,
+       'cache' => CacheHealthIndicator::class,
+   ],
+   ```
+
+4. Read the new component. Components have their own path:
+
+   ```bash
+   curl http://127.0.0.1:8000/actuator/health/queue
+   ```
+
+   ```json
+   { "status": "UP", "details": { "pending": 0, "threshold": 100 } }
+   ```
+
+</Steps>
+
+## Make it fail
+
+An indicator entry can pass arguments to the constructor. Set the threshold to `0`, so that even
+an empty queue is too much:
+
+```php title="config/actuator.php"
+'queue' => [App\Health\QueueBacklogHealthIndicator::class, ['threshold' => 0]],
+```
+
+```bash
+curl -i http://127.0.0.1:8000/actuator/health
+```
+
+```http
+HTTP/1.1 503 Service Unavailable
+Content-Type: application/json
+```
+
+```json
+{
+  "status": "DOWN",
+  "components": {
+    "queue": { "status": "DOWN", "details": { "pending": 0, "threshold": 0 } }
+  }
+}
+```
+
+The output above is shortened: the other components are still listed and still `UP`. One `DOWN`
+component makes the whole application `DOWN`, with HTTP 503.
+
+Put the threshold back to `100` before you go on.
+
+## What we did
+
+We installed Laravel Actuator, read the health of the application with and without details, saw
+the readiness group take the application out of service during maintenance, and wrote a health
+indicator with a configurable threshold.
+
+## Where to go next
+
+- Before you deploy, [secure the endpoints](/laravel-actuator/guides/secure-endpoints/) and remove
+  `ACTUATOR_HEALTH_SHOW_DETAILS=always` from production.
+- Wire the groups into your platform: [Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/)
+  or [load balancers and containers](/laravel-actuator/guides/load-balancers-and-containers/).
+- Learn [how to test an indicator](/laravel-actuator/guides/test-your-indicators/).
+- Understand [how statuses are aggregated](/laravel-actuator/concepts/health-model/).
