@@ -12,8 +12,8 @@ use Throwable;
 
 /**
  * Runs a validation query on a database connection (the default one when null). On MySQL,
- * MariaDB, PostgreSQL and SQL Server, the details also hold the connections open on the server,
- * from every client, and the most it accepts. With a maximum connection usage, such as 0.9, the
+ * MariaDB and PostgreSQL, the details also hold the client connections open on the server, from
+ * every client, and the most it accepts. With a maximum connection usage, such as 0.9, the
  * database is DOWN once the open connections reach that share of the server's limit.
  */
 final readonly class DatabaseHealthIndicator implements HealthIndicator
@@ -25,7 +25,14 @@ final readonly class DatabaseHealthIndicator implements HealthIndicator
         'mysql' => 'select @@max_connections',
         'mariadb' => 'select @@max_connections',
         'pgsql' => 'show max_connections',
-        'sqlsrv' => 'select @@max_connections',
+    ];
+
+    /**
+     * Laravel driver name => the query that counts the client connections, where threadCount()
+     * counts more: on PostgreSQL, it also counts the background processes.
+     */
+    private const OPEN_CONNECTIONS = [
+        'pgsql' => "select count(*) from pg_stat_activity where backend_type = 'client backend'",
     ];
 
     /**
@@ -57,7 +64,7 @@ final readonly class DatabaseHealthIndicator implements HealthIndicator
 
         $details['maxConnectionUsage'] = $this->maxConnectionUsage;
 
-        return $open >= $max * $this->maxConnectionUsage ? Health::down($details) : Health::up($details);
+        return $open / $max >= $this->maxConnectionUsage ? Health::down($details) : Health::up($details);
     }
 
     /**
@@ -68,14 +75,14 @@ final readonly class DatabaseHealthIndicator implements HealthIndicator
      */
     private function connections(Connection $connection): array
     {
-        $query = self::MAX_CONNECTIONS[$connection->getDriverName()] ?? null;
-        if ($query === null) {
+        $driver = $connection->getDriverName();
+        if (! isset(self::MAX_CONNECTIONS[$driver])) {
             return [null, null];
         }
 
         try {
-            $open = $connection->threadCount();
-            $max = $connection->scalar($query);
+            $open = isset(self::OPEN_CONNECTIONS[$driver]) ? $connection->scalar(self::OPEN_CONNECTIONS[$driver]) : $connection->threadCount();
+            $max = $connection->scalar(self::MAX_CONNECTIONS[$driver]);
         } catch (Throwable) {
             return [null, null];
         }

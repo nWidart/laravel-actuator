@@ -65,8 +65,8 @@ Checks the free space on the disk that holds a path.
 
 ## `DatabaseHealthIndicator`
 
-Runs `select 1` on a database connection. On MySQL, MariaDB, PostgreSQL and SQL Server, it also
-reads how many connections are open on the server, from every client, and the most the server
+Runs `select 1` on a database connection. On MySQL, MariaDB and PostgreSQL, it also reads
+how many client connections are open on the server, from every client, and the most the server
 accepts.
 
 | Argument             | Type           | Default | Description                                     |
@@ -84,11 +84,11 @@ accepts.
 | `connection`         | string  | Connection name, for example `mysql`.         |
 | `database`           | string  | Driver title, for example `MySQL`, `PostgreSQL`, `SQLite`. |
 | `validationQuery`    | string  | `select 1`.                                   |
-| `connections`        | integer | Connections open on the server, as `php artisan db:monitor` counts them. On SQL Server, only the running sessions. |
+| `connections`        | integer | Client connections open on the server: `Threads_connected` on MySQL and MariaDB, client backends of `pg_stat_activity` on PostgreSQL. |
 | `maxConnections`     | integer | The server's connection limit: `max_connections` on MySQL, MariaDB and PostgreSQL. |
 | `maxConnectionUsage` | float   | The configured argument, when it is set.      |
 
-`connections` and `maxConnections` are left out on SQLite, and when the database user may not read
+`connections` and `maxConnections` are left out on SQLite and SQL Server, and when the database user may not read
 them. The status is then `UP` whatever `maxConnectionUsage` is. Under PHP-FPM, each busy worker
 holds one connection, so a server near its limit is about to refuse requests:
 
@@ -108,7 +108,7 @@ Arguments: none.
 | Status           | When                                                            |
 | ---------------- | --------------------------------------------------------------- |
 | `UP`             | Every migration has run.                                        |
-| `OUT_OF_SERVICE` | At least one migration has not run.                             |
+| `OUT_OF_SERVICE` | At least one migration has not run. Migrations that `migrate` skips, with `Migrator::withoutMigrations()` or a `shouldRun()` that returns `false`, do not count. |
 | `UNKNOWN`        | The migrations table cannot be read, for example the database is down. |
 
 | Detail    | Type            | Description                                                  |

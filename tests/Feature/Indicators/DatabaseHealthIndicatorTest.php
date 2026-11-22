@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Tests\Feature\Indicators;
 
 use Closure;
+use Illuminate\Database\Connection;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Database\MySqlConnection;
+use Illuminate\Database\PostgresConnection;
 use Mockery;
 use Nwidart\Actuator\Health\Indicators\DatabaseHealthIndicator;
 use Nwidart\Actuator\Health\Status;
@@ -40,6 +42,44 @@ final class DatabaseHealthIndicatorTest extends TestCase
         $this->assertSame(Status::Up, $below->status);
         $this->assertSame(Status::Down, $reached->status);
         $this->assertSame(['connections' => 90, 'maxConnections' => 100, 'maxConnectionUsage' => 0.9], array_slice($reached->details, 3));
+    }
+
+    #[Test]
+    public function the_maximum_usage_is_reached_at_exactly_its_share(): void
+    {
+        $health = (new DatabaseHealthIndicator($this->manager($this->mysql(open: 55, max: 100)), maxConnectionUsage: 0.55))->health();
+
+        $this->assertSame(Status::Down, $health->status);
+    }
+
+    #[Test]
+    public function postgresql_counts_only_client_connections(): void
+    {
+        $connection = new class extends PostgresConnection
+        {
+            public function __construct()
+            {
+                parent::__construct(fn () => throw new RuntimeException('not connected'), 'shop', '', ['driver' => 'pgsql', 'name' => 'pgsql']);
+            }
+
+            public function select($query, $bindings = [], $useReadPdo = true, array $fetchUsing = [])
+            {
+                return [(object) ['1' => 1]];
+            }
+
+            public function scalar($query, $bindings = [], $useReadPdo = true)
+            {
+                return match ($query) {
+                    "select count(*) from pg_stat_activity where backend_type = 'client backend'" => 12,
+                    'show max_connections' => '100',
+                    default => throw new RuntimeException("Unexpected query [{$query}]."),
+                };
+            }
+        };
+
+        $health = (new DatabaseHealthIndicator($this->manager($connection)))->health();
+
+        $this->assertSame(['connections' => 12, 'maxConnections' => 100], array_slice($health->details, 3));
     }
 
     #[Test]
@@ -95,7 +135,7 @@ final class DatabaseHealthIndicatorTest extends TestCase
         };
     }
 
-    private function manager(MySqlConnection $connection): DatabaseManager
+    private function manager(Connection $connection): DatabaseManager
     {
         $manager = Mockery::mock(DatabaseManager::class);
         $manager->allows('connection')->with(null)->andReturn($connection);

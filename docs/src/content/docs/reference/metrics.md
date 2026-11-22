@@ -82,8 +82,8 @@ describe that process and its server. Turn them off with `instrumentation.runtim
 | `php.fpm.slow_requests`        | `php_fpm_slow_requests_total`         | PHP runs under PHP-FPM                |
 | `system.cpu.load_average.1m`   | `system_cpu_load_average_1m`          | Not on Windows                        |
 | `system.filesystem.usage`      | `system_filesystem_usage_bytes`       | The disk that holds the application   |
-| `laravel.db.server.connections` | `laravel_db_server_connections`      | The default connection is MySQL, MariaDB, PostgreSQL or SQL Server |
-| `laravel.db.server.connections.max` | `laravel_db_server_connections_max` | The default connection is MySQL, MariaDB, PostgreSQL or SQL Server |
+| `laravel.db.server.connections` | `laravel_db_server_connections`      | The default connection is MySQL, MariaDB or PostgreSQL |
+| `laravel.db.server.connections.max` | `laravel_db_server_connections_max` | The default connection is MySQL, MariaDB or PostgreSQL |
 | `laravel.db.migrations.pending` | `laravel_db_migrations_pending`      | Always                                |
 
 `laravel.info` has the attributes `laravel.version`, `process.runtime.name`,

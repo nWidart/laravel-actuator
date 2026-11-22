@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature\Indicators;
 
+use Illuminate\Database\Migrations\Migrator;
 use Illuminate\Database\QueryException;
 use Nwidart\Actuator\Health\Indicators\MigrationsHealthIndicator;
 use Nwidart\Actuator\Health\Status;
@@ -25,6 +26,29 @@ final class MigrationsHealthIndicatorTest extends TestCase
         $this->artisan('migrate')->assertSuccessful();
 
         $this->assertSame(Status::Up, $indicator->health()->status);
+    }
+
+    #[Test]
+    public function migrations_that_migrate_skips_are_not_pending(): void
+    {
+        $migrator = $this->app->make('migrator');
+        $migrator->path(dirname(__DIR__, 2).'/Fixtures/migrations');
+        $migrator->path(dirname(__DIR__, 2).'/Fixtures/skipped-migrations');
+        Migrator::withoutMigrations(['2026_01_01_000000_create_orders_table']);
+
+        try {
+            $this->assertSame(Status::Up, $this->app->make(MigrationsHealthIndicator::class)->health()->status);
+        } finally {
+            Migrator::withoutMigrations([]);
+        }
+    }
+
+    #[Test]
+    public function it_finds_the_migrator_by_its_name_as_laravel_12_0_binds_it(): void
+    {
+        unset($this->app[Migrator::class]);
+
+        $this->assertSame(Status::Up, $this->app->make(MigrationsHealthIndicator::class)->health()->status);
     }
 
     #[Test]
