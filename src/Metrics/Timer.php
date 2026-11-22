@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Metrics;
 
 use Closure;
+use OpenTelemetry\API\Metrics\HistogramInterface;
 
 /**
  * Counts events and the time they took, in seconds.
@@ -14,13 +15,15 @@ final readonly class Timer
     /**
      * @internal use MeterRegistry::timer()
      *
-     * @param  list<float>  $buckets
+     * @param  array<non-empty-string, string|int|float|bool>  $tags
      */
-    public function __construct(private ?Buffer $buffer, private MeterId $id, private array $buckets) {}
+    public function __construct(private ?HistogramInterface $histogram, private array $tags) {}
 
     public function record(float $seconds): void
     {
-        $this->buffer?->observe($this->id, max(0.0, $seconds), $this->buckets);
+        if (is_finite($seconds)) {
+            $this->histogram?->record(max(0.0, $seconds), $this->tags);
+        }
     }
 
     /**

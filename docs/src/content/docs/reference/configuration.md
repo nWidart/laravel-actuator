@@ -31,19 +31,18 @@ Keys you do not publish keep their default values.
 | `mappings.middleware`            | list of strings         | `[]`                                     |                                |
 | `scheduledtasks.middleware`      | list of strings         | `[]`                                     |                                |
 | `prometheus.middleware`          | list of strings         | `[]`                                     |                                |
-| `metrics.enabled`                | boolean                 | `true`                                   | `ACTUATOR_METRICS_ENABLED`     |
-| `metrics.store`                  | string                  | `'cache'`                                | `ACTUATOR_METRICS_STORE`       |
-| `metrics.cache.store`            | string or `null`        | `null`                                   | `ACTUATOR_METRICS_CACHE_STORE` |
-| `metrics.redis.connection`       | string                  | `'default'`                              | `ACTUATOR_METRICS_REDIS_CONNECTION` |
-| `metrics.tags`                   | map of strings          | `[]`                                     |                                |
 | `metrics.enable`                 | map of booleans         | `[]`                                     |                                |
-| `metrics.distribution.slo`       | map of lists of numbers | Buckets for the four built-in timers     |                                |
+| `metrics.distribution.slo`       | map of lists of numbers | `[]`                                     |                                |
 | `{id}.middleware`                | list of strings         | `[]`                                     |                                |
 
 Keys read when routes are registered: `base_path`, `exposure.*` and every `middleware` key. After a
 change, rebuild the route cache if you use one. The `metrics.*` keys are read once, when the
 application starts: restart queue workers and Octane after a change. The other keys are read on
 each request.
+
+The store, the built-in metrics and the labels of every sample are set in `config/metrics.php`,
+the file of [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#configuration). See
+[the metrics model](/laravel-actuator/concepts/metrics-model/#two-packages).
 
 ## `base_path`
 
@@ -221,53 +220,18 @@ The middleware added after the shared `middleware` on the
 
 ```php
 'metrics' => [
-    'enabled' => env('ACTUATOR_METRICS_ENABLED', true),
-    'store' => env('ACTUATOR_METRICS_STORE', 'cache'),
-    'cache' => ['store' => env('ACTUATOR_METRICS_CACHE_STORE')],
-    'redis' => ['connection' => env('ACTUATOR_METRICS_REDIS_CONNECTION', 'default')],
-    'tags' => [],
     'enable' => [],
-    'distribution' => ['slo' => [/* ... */]],
+    'distribution' => ['slo' => []],
 ],
 ```
 
+These keys apply only to the meters you create with
+[`MeterRegistry`](/laravel-actuator/reference/php-api/#meterregistry). The built-in metrics are
+switched in `instrumentation` of `config/metrics.php`. See the
+[built-in metrics](/laravel-actuator/reference/metrics/).
+
 Laravel merges the package defaults one level deep. If your published file has a `metrics` key,
 the keys you leave out of it have no default: copy the whole array.
-
-### `metrics.enabled`
-
-Metrics are collected when this is `true` **and** the `prometheus` endpoint is exposed. Otherwise
-the package registers no listener, every meter does nothing, and the endpoint returns an empty
-body.
-
-### `metrics.store`
-
-Where the measurements are kept between requests.
-
-| Value        | Store                                                                   |
-| ------------ | ----------------------------------------------------------------------- |
-| `'cache'`    | One entry of a Laravel cache store, written under a lock.               |
-| `'redis'`    | One hash on a Laravel Redis connection.                                 |
-| A class name | Your implementation of `Nwidart\Actuator\Metrics\MetricsStore`, built by the container. Any other class throws `InvalidArgumentException`. |
-
-See [choose a metrics store](/laravel-actuator/guides/choose-a-metrics-store/).
-
-### `metrics.cache.store`
-
-The cache store of the `cache` metrics store: a key of `cache.stores`. `null` is the default cache
-store. The cache driver must support locks.
-
-### `metrics.redis.connection`
-
-The Redis connection of the `redis` metrics store: a key of `database.redis`.
-
-### `metrics.tags`
-
-Tags added to every meter. A tag that a meter sets itself wins over a common tag of the same name.
-
-```php
-'tags' => ['application' => 'shop', 'region' => 'eu-west-1'],
-```
 
 ### `metrics.enable`
 
@@ -275,18 +239,17 @@ Map of a meter name, or the start of one, to a boolean. `false` turns the matchi
 
 ```php
 'enable' => [
-    'php' => false,                  // php.info, php.opcache.*, php.fpm.*
-    'php.info' => true,              // but keep this one
-    'db.queries' => false,
+    'orders' => false,               // orders.placed, orders.refunded, ...
+    'orders.placed' => true,         // but keep this one
 ],
 ```
 
 A key matches a meter with the same name, and every meter whose name starts with the key followed
-by a dot. `php` matches `php.info` but not `phpunit.runs`. When several keys match, the longest
+by a dot. `orders` matches `orders.placed` but not `ordersx`. When several keys match, the longest
 wins. A meter that no key matches is on.
 
-A meter that is off records nothing, and is left out of the endpoint even when the store still
-holds its series.
+A meter that is off records nothing. The series it recorded before stay in the store until you
+[clear the store](/laravel-actuator/guides/choose-a-metrics-store/#clear-the-store).
 
 ### `metrics.distribution.slo`
 
@@ -296,22 +259,18 @@ which is seconds for a timer.
 ```php
 'distribution' => [
     'slo' => [
-        'http.server.requests' => [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
-        'db.queries' => [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 5],
-        'queue.jobs' => [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30, 60, 300],
-        'tasks.scheduled.execution' => [0.1, 0.5, 1, 5, 10, 30, 60, 300, 900],
+        'payment.charge' => [0.1, 0.25, 0.5, 1, 2.5, 5],
     ],
 ],
 ```
 
-A meter with buckets is rendered as a Prometheus histogram. A meter without an entry, or with an
-empty list, publishes only its count and sum. The `+Inf` bucket is always added.
+The bounds are sorted for you. A meter without an entry, or with an empty list, has only the
+`+Inf` bucket: it publishes its count and sum. The `+Inf` bucket is always added.
 
 Each bound adds one series for each combination of tag values of the meter.
 
-After you change the bounds of a meter, what was already counted moves to the next larger new
-bound. The totals from before the change are therefore less precise, but rates and percentiles
-over a period after the change are exact. To start afresh,
+The store keeps a meter with other bounds apart from the one with the old bounds, and the scrape
+then mixes their samples. After you change the bounds of a meter,
 [clear the store](/laravel-actuator/guides/choose-a-metrics-store/#clear-the-store).
 
 ## Visibility values

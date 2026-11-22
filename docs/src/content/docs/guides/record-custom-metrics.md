@@ -6,9 +6,10 @@ description: Count events, time operations and publish gauges from your applicat
 Inject `Nwidart\Actuator\Metrics\MeterRegistry` and create a meter. A meter has a dotted name and
 optional tags. The [metrics model](/laravel-actuator/concepts/metrics-model/) explains each type.
 
-Expose the `prometheus` endpoint first, see
-[collect metrics with Prometheus](/laravel-actuator/guides/collect-metrics-with-prometheus/). While
-it is not exposed, every meter does nothing, so you can leave the calls in your code.
+The meters are recorded by [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
+into its store, whether or not the `prometheus` endpoint is exposed. To read them, see
+[collect metrics with Prometheus](/laravel-actuator/guides/collect-metrics-with-prometheus/). With
+`METRICS_ENABLED=false`, every meter does nothing, so you can leave the calls in your code.
 
 ## Count events
 
@@ -35,7 +36,7 @@ final class PlaceOrder
 
 ```text
 # TYPE orders_placed_total counter
-orders_placed_total{channel="web"} 12
+orders_placed_total{channel="web",otel_scope_name="nwidart/laravel-actuator"} 12
 ```
 
 `increment()` takes an amount: `->increment($order->lines->count())`. A counter cannot go down.
@@ -55,10 +56,14 @@ throws. When you already have a duration, record it in seconds:
 $this->metrics->timer('payment.charge', ['provider' => 'stripe'])->record(0.153);
 ```
 
+A timer is a Prometheus histogram. Without [buckets](#add-histogram-buckets), it has only the `+Inf`
+bucket, which holds the count:
+
 ```text
-# TYPE payment_charge_seconds summary
-payment_charge_seconds_count{provider="stripe"} 2
-payment_charge_seconds_sum{provider="stripe"} 0.31
+# TYPE payment_charge_seconds histogram
+payment_charge_seconds_bucket{otel_scope_name="nwidart/laravel-actuator",provider="stripe",le="+Inf"} 2
+payment_charge_seconds_sum{otel_scope_name="nwidart/laravel-actuator",provider="stripe"} 0.31
+payment_charge_seconds_count{otel_scope_name="nwidart/laravel-actuator",provider="stripe"} 2
 ```
 
 ## Record an amount
@@ -70,39 +75,49 @@ $this->metrics->summary('upload.size', ['disk' => 's3'], unit: 'bytes')->record(
 ```
 
 ```text
-# TYPE upload_size_bytes summary
-upload_size_bytes_count{disk="s3"} 4
-upload_size_bytes_sum{disk="s3"} 1048576
+# TYPE upload_size_bytes histogram
+upload_size_bytes_bucket{disk="s3",otel_scope_name="nwidart/laravel-actuator",le="+Inf"} 4
+upload_size_bytes_sum{disk="s3",otel_scope_name="nwidart/laravel-actuator"} 1048576
+upload_size_bytes_count{disk="s3",otel_scope_name="nwidart/laravel-actuator"} 4
 ```
+
+The units `seconds`, `milliseconds` and `bytes` become `_seconds`, `_milliseconds` and `_bytes`.
+Another unit is passed on as it is.
 
 ## Publish a gauge
 
 A gauge is a value that goes up and down. There are two ways to give it a value.
 
-**Read it during the scrape.** Register a callback in a service provider. The callback runs when
-the endpoint is read, in the process that answers:
+**Read it during the scrape.** Register a callback in the `boot()` method of a service provider.
+The callback runs when the endpoint is read, in the process that answers. Its value is never
+stored:
 
 ```php title="app/Providers/AppServiceProvider.php"
 use Illuminate\Support\Facades\Queue;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 
-public function boot(): void
+public function boot(MeterRegistry $metrics): void
 {
-    $this->callAfterResolving(MeterRegistry::class, function (MeterRegistry $metrics): void {
-        $metrics->gauge('queue.size', ['queue' => 'default'], fn () => Queue::size('default'));
-    });
+    $metrics->gauge('queue.size', ['queue' => 'default'], fn () => Queue::size('default'));
 }
 ```
 
-A callback that returns `null` leaves the gauge out.
+A callback that returns `null` leaves the gauge out. A callback that throws is skipped, and its
+exception is reported once.
 
-**Set it when it changes.** The value is stored, and the last one wins:
+Register the callback on every request, as above, or with
+`$this->callAfterResolving(MeterRegistry::class, ...)`: the package builds the registry on every
+request, so both run in the request that answers the scrape.
+
+**Set it when it changes.** The value is stored, and the last value set wins, across every
+process:
 
 ```php
 $this->metrics->gauge('backup.last.success', unit: 'seconds')->set(time());
 ```
 
-`counter()` also takes a callback, for a total that another system already keeps.
+`counter()` also takes a callback, for a total that another system already keeps. It is read
+during the scrape in the same way, and `increment()` then does nothing.
 
 ## Add histogram buckets
 
@@ -113,7 +128,6 @@ The bounds are in the base unit: seconds for a timer.
 'metrics' => [
     'distribution' => [
         'slo' => [
-            // ...
             'payment.charge' => [0.1, 0.25, 0.5, 1, 2.5, 5],
         ],
     ],
@@ -122,20 +136,24 @@ The bounds are in the base unit: seconds for a timer.
 
 ```text
 # TYPE payment_charge_seconds histogram
-payment_charge_seconds_bucket{provider="stripe",le="0.1"} 0
-payment_charge_seconds_bucket{provider="stripe",le="0.25"} 2
+payment_charge_seconds_bucket{otel_scope_name="nwidart/laravel-actuator",provider="stripe",le="0.1"} 0
+payment_charge_seconds_bucket{otel_scope_name="nwidart/laravel-actuator",provider="stripe",le="0.25"} 2
 ...
-payment_charge_seconds_bucket{provider="stripe",le="+Inf"} 2
+payment_charge_seconds_bucket{otel_scope_name="nwidart/laravel-actuator",provider="stripe",le="+Inf"} 2
 ```
+
+`metrics.distribution.slo` applies only to the meters you create with `MeterRegistry`. The built-in
+metrics have buckets of their own.
 
 ## Add a help text
 
-Describe the meter in a service provider, so that every process knows the text:
+Describe the meter in a service provider, before it is first used:
 
 ```php
-$this->callAfterResolving(MeterRegistry::class, function (MeterRegistry $metrics): void {
+public function boot(MeterRegistry $metrics): void
+{
     $metrics->describe('orders.placed', 'Orders placed, by sales channel.');
-});
+}
 ```
 
 ```text
@@ -150,29 +168,48 @@ URL or an error message as a tag value.
 
 ## Record metrics from a package
 
-A package records metrics the same way. Use `callAfterResolving()` for the calls in a service
-provider: the package then also works in an application where metrics are not collected.
+A package records metrics the same way. When Laravel Actuator is optional for the package, guard
+the calls in its service provider:
 
-To add a tag to the meters the package does not own, see
+```php title="src/BillingServiceProvider.php"
+use Nwidart\Actuator\Metrics\MeterRegistry;
+
+public function boot(): void
+{
+    if (class_exists(MeterRegistry::class)) {
+        $this->app->make(MeterRegistry::class)->describe('billing.invoices', 'Invoices sent.');
+    }
+}
+```
+
+To add a tag to the metrics the package does not own, see
 [add tags to the built-in metrics](/laravel-actuator/guides/tag-built-in-metrics/).
 
 ## Test your metrics
 
-The cache store works with the `array` cache driver, within one test. Flush the measurements,
-then read the endpoint:
+`Metrics::fake()` of laravel-metrics keeps what the application records in memory, so a test needs
+no Redis and sees only its own metrics. Call it before the code under test records:
 
 ```php
-use Nwidart\Actuator\Metrics\MeterRegistry;
+use Nwidart\Metrics\Facades\Metrics;
 
 public function test_an_order_is_counted(): void
 {
+    $metrics = Metrics::fake();
+
     app(PlaceOrder::class)->handle($order);
 
-    app(MeterRegistry::class)->flush();
-
-    $this->get('/actuator/prometheus')->assertSee('orders_placed_total{channel="web"} 1', false);
+    $metrics->assertValue('orders.placed', 1, ['channel' => 'web']);
 }
 ```
 
-The `prometheus` endpoint must be exposed in the test environment. An HTTP test flushes at the end
-of each request, so a meter recorded by a route needs no `flush()`.
+`assertRecorded()`, `assertNotRecorded()` and `assertNothingRecorded()` are also available. See
+[testing](https://github.com/nWidart/laravel-metrics#testing) in the laravel-metrics README.
+
+A meter with a callback is not recorded, so the fake does not hold it. To test one, expose
+`prometheus` in the test environment and read the endpoint:
+
+```php
+$this->get('/actuator/prometheus')
+    ->assertSee('queue_size{otel_scope_name="nwidart/laravel-actuator",queue="default"} 0', false);
+```

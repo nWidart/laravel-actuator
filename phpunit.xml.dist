@@ -17,6 +17,8 @@
         </include>
     </source>
     <php>
+        <!-- A test that breaks the metrics store on purpose makes OpenTelemetry log a warning. -->
+        <env name="OTEL_LOG_LEVEL" value="none"/>
         <env name="APP_ENV" value="testing"/>
     </php>
 </phpunit>

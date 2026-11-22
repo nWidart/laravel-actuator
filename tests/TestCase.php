@@ -18,5 +18,8 @@ abstract class TestCase extends Orchestra
     {
         $app['config']->set('database.default', 'testing');
         $app['config']->set('cache.default', 'array');
+        // nwidart/laravel-metrics keeps the metrics in the array cache: one test, one store, no Redis.
+        $app['config']->set('metrics.store.driver', 'cache');
+        $app['config']->set('metrics.store.cache_store', 'array');
     }
 }

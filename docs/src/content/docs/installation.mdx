@@ -9,7 +9,8 @@ import { Steps } from '@astrojs/starlight/components';
 
 - PHP 8.2 or later
 - Laravel 12 or 13
-- For the optional Redis indicator: the `phpredis` extension or the `predis/predis` package
+- For the metrics in production, and for the optional Redis indicator: the `phpredis` extension or
+  the `predis/predis` package
 
 ## Install the package
 
@@ -23,6 +24,11 @@ import { Steps } from '@astrojs/starlight/components';
 
    Laravel package discovery registers `Nwidart\Actuator\ActuatorServiceProvider`. You do not need
    to add it to `bootstrap/providers.php`.
+
+   Composer also installs [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
+   which records the metrics. It starts at once, into the `default` Redis connection. Without Redis,
+   set `METRICS_STORE=cache` to use a cache store, or `METRICS_ENABLED=false` to record nothing. See
+   [choose a metrics store](/laravel-actuator/guides/choose-a-metrics-store/).
 
 2. Check that the health endpoint answers:
 
@@ -58,6 +64,8 @@ return [
     Nwidart\Actuator\ActuatorServiceProvider::class,
 ];
 ```
+
+It registers the service provider of laravel-metrics for you.
 :::
 
 ## Route and configuration caching
