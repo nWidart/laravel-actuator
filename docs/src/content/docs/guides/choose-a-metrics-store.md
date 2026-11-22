@@ -136,6 +136,7 @@ Metrics never break the work they measure.
 | A write fails, or the cache refuses the entry | The measurements are dropped. The exception is reported once per process. |
 | The lock of the cache store stays taken | The measurements are dropped silently.                          |
 | A read fails during a scrape    | The endpoint answers HTTP 503, and Prometheus marks the target as down. |
+| `actuator:metrics:clear` cannot get the lock of the cache store | The command fails. Run it again. |
 
 ## Clear the store
 

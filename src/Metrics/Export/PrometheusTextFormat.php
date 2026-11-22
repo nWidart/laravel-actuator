@@ -31,6 +31,10 @@ final class PrometheusTextFormat
         ksort($families);
         $output = '';
 
+        // Two meters can become the same sample, such as "orders.placed" and
+        // "orders_placed". Prometheus rejects a scrape that repeats a sample.
+        $seen = [];
+
         foreach ($families as $family => $members) {
             $distribution = in_array($members[0]->type, [MeterType::Timer, MeterType::Summary], true);
             $histogram = $distribution && array_filter($members, static fn (MeterSnapshot $meter): bool => $meter->buckets !== []) !== [];
@@ -50,21 +54,21 @@ final class PrometheusTextFormat
 
             foreach ($members as $meter) {
                 if (! $distribution) {
-                    $lines[] = $this->sample($family, $meter->tags, $meter->value);
+                    $lines[] = $this->sample($seen, $family, $meter->tags, $meter->value);
 
                     continue;
                 }
 
                 if ($histogram) {
                     foreach ($meter->buckets as [$bound, $count]) {
-                        $lines[] = $this->sample("{$family}_bucket", [...$meter->tags, 'le' => $this->number($bound)], $count);
+                        $lines[] = $this->sample($seen, "{$family}_bucket", [...$meter->tags, 'le' => $this->number($bound)], $count);
                     }
 
-                    $lines[] = $this->sample("{$family}_bucket", [...$meter->tags, 'le' => '+Inf'], $meter->count);
+                    $lines[] = $this->sample($seen, "{$family}_bucket", [...$meter->tags, 'le' => '+Inf'], $meter->count);
                 }
 
-                $lines[] = $this->sample("{$family}_count", $meter->tags, $meter->count);
-                $lines[] = $this->sample("{$family}_sum", $meter->tags, $meter->sum);
+                $lines[] = $this->sample($seen, "{$family}_count", $meter->tags, $meter->count);
+                $lines[] = $this->sample($seen, "{$family}_sum", $meter->tags, $meter->sum);
             }
 
             $output .= implode('', $lines);
@@ -96,9 +100,12 @@ final class PrometheusTextFormat
     }
 
     /**
+     * One sample line, or nothing when the same sample was already written.
+     *
+     * @param  array<string, true>  $seen
      * @param  array<string, string>  $tags
      */
-    private function sample(string $name, array $tags, float $value): string
+    private function sample(array &$seen, string $name, array $tags, float $value): string
     {
         $labels = [];
 
@@ -108,7 +115,15 @@ final class PrometheusTextFormat
             $labels[$label] = $label.'="'.strtr($tagValue, ['\\' => '\\\\', '"' => '\\"', "\n" => '\\n']).'"';
         }
 
-        return $name.($labels === [] ? '' : '{'.implode(',', $labels).'}').' '.$this->number($value)."\n";
+        $sample = $name.($labels === [] ? '' : '{'.implode(',', $labels).'}');
+
+        if (isset($seen[$sample])) {
+            return '';
+        }
+
+        $seen[$sample] = true;
+
+        return $sample.' '.$this->number($value)."\n";
     }
 
     private function name(string $name): string

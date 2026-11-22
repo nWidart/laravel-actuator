@@ -37,7 +37,7 @@ collected, the registry is never built and your callback never runs.
 | Meter                       | The callback receives                                                         |
 | --------------------------- | ----------------------------------------------------------------------------- |
 | `http.server.requests`      | `Illuminate\Foundation\Http\Events\RequestHandled`                            |
-| `queue.jobs`                | `Illuminate\Queue\Events\JobProcessed`, or `JobExceptionOccurred` when the job threw |
+| `queue.jobs`                | `Illuminate\Queue\Events\JobProcessed`, `JobExceptionOccurred` when the job threw, or `JobTimedOut` when the worker stopped it |
 | `db.queries`                | `Illuminate\Database\Events\QueryExecuted`                                    |
 | `exceptions`                | The `Throwable`                                                               |
 | `tasks.scheduled.execution` | `Illuminate\Console\Events\ScheduledTaskFinished`, or `ScheduledTaskFailed` when the task threw |
@@ -51,6 +51,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobProcessed;
+use Illuminate\Queue\Events\JobTimedOut;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Throwable;
 
@@ -61,7 +62,7 @@ public function boot(): void
             'module' => $this->modules->ofRoute($event->request->route()) ?? 'none',
         ]);
 
-        $metrics->tagUsing('queue.jobs', fn (JobProcessed|JobExceptionOccurred $event): array => [
+        $metrics->tagUsing('queue.jobs', fn (JobProcessed|JobExceptionOccurred|JobTimedOut $event): array => [
             'module' => $this->modules->ofClass($event->job->resolveName()) ?? 'none',
         ]);
 
@@ -85,7 +86,8 @@ and the callback only runs in an application that has the registry.
   value. Series of one meter should carry the same tags.
 - **Keep the set of values small and fixed.** Each value multiplies the number of series. A module,
   a tenant plan or a region is fine. A user id is not.
-- **Be fast.** The callback runs for every request, job and query.
+- **Be fast.** The callback runs for every request, job and query. What the callback itself does
+  is not measured: a query it runs does not appear in `db.queries`.
 - **Do not rely on exceptions.** A callback that throws is ignored, its exception is reported once
   per process, and the measurement is recorded without its tags.
 - **Return strings, numbers or booleans.** A value of another type, such as `null`, is left out.
@@ -94,7 +96,7 @@ A tag you return replaces a built-in tag of the same name. Use this to bound a b
 your application makes unbounded, such as the `queue` tag when queues are created at runtime:
 
 ```php
-$metrics->tagUsing('queue.jobs', fn (JobProcessed|JobExceptionOccurred $event): array => [
+$metrics->tagUsing('queue.jobs', fn (JobProcessed|JobExceptionOccurred|JobTimedOut $event): array => [
     'queue' => str_starts_with($event->job->getQueue(), 'tenant-') ? 'tenant' : $event->job->getQueue(),
 ]);
 ```

@@ -44,6 +44,13 @@ final class ScheduledTaskMetrics implements MeterBinder
 
         $this->events->listen(ScheduledTaskFinished::class, function (ScheduledTaskFinished $event) use ($registry): void {
             unset($this->started[spl_object_id($event->task)]);
+
+            // Laravel also raises this event for a task it did not run, because the
+            // previous run still holds the overlap lock. Only a task that ran in the
+            // foreground has an exit code. A background task gets it in another process.
+            if ($event->task->exitCode === null && ! $event->task->runInBackground) {
+                return;
+            }
             $this->record($registry, $event, $event->runtime, (int) $event->task->exitCode === 0 ? 'SUCCESS' : 'FAILED');
         });
 
@@ -61,7 +68,7 @@ final class ScheduledTaskMetrics implements MeterBinder
     private function record(MeterRegistry $registry, ScheduledTaskFinished|ScheduledTaskFailed $event, float $seconds, string $outcome): void
     {
         $registry->timer(self::NAME, [
-            'task' => ScheduledTaskTarget::of($event->task),
+            'task' => ScheduledTaskTarget::name($event->task),
             'outcome' => $outcome,
             ...$registry->tagsFor(self::NAME, $event),
         ])->record($seconds);

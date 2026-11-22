@@ -65,6 +65,30 @@ final class RedisStoreIntegrationTest extends TestCase
         $this->assertSame([], $store->read());
     }
 
+    #[Test]
+    #[DataProvider('clients')]
+    public function it_fails_when_redis_refuses_the_command(string $client): void
+    {
+        $store = $this->store($client);
+        $this->app->make(RedisManager::class)->connection()->command('set', ['actuator:metrics', 'not a hash']);
+
+        try {
+            $store->read();
+            $this->fail('A refused read must not look like an empty store.');
+        } catch (Throwable) {
+            $this->addToAssertionCount(1);
+        }
+
+        try {
+            $store->write(['requests' => 1.0], []);
+            $this->fail('A refused write must not look like a success.');
+        } catch (Throwable) {
+            $this->addToAssertionCount(1);
+        } finally {
+            $store->clear();
+        }
+    }
+
     /**
      * @return iterable<string, array{string}>
      */

@@ -9,13 +9,15 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Queue\Jobs\SyncJob;
 use Nwidart\Actuator\Metrics\MeterBinder;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 
 /**
  * Times every attempt to run a queued job. Tag contributors receive the
- * JobProcessed event, or the JobExceptionOccurred event when the job threw.
+ * JobProcessed event, the JobExceptionOccurred event when the job threw, or
+ * the JobTimedOut event when the worker stopped the job.
  *
  * @internal
  */
@@ -54,13 +56,23 @@ final class QueueJobMetrics implements MeterBinder
         $this->events->listen(JobExceptionOccurred::class, function (JobExceptionOccurred $event) use ($registry): void {
             $this->record($registry, $event, $event->job->hasFailed() || $event->job instanceof SyncJob ? 'FAILED' : 'RETRY');
         });
+
+        // The worker kills itself right after this event, so nothing else reports the attempt.
+        $this->events->listen(JobTimedOut::class, function (JobTimedOut $event) use ($registry): void {
+            $this->record($registry, $event, $event->job->hasFailed() ? 'FAILED' : 'RETRY');
+        });
     }
 
-    private function record(MeterRegistry $registry, JobProcessed|JobExceptionOccurred $event, string $outcome): void
+    private function record(MeterRegistry $registry, JobProcessed|JobExceptionOccurred|JobTimedOut $event, string $outcome): void
     {
         $id = spl_object_id($event->job);
         $start = $this->started[$id] ?? null;
         unset($this->started[$id]);
+
+        // Already recorded: a timeout can be followed by the exception it raises.
+        if ($start === null) {
+            return;
+        }
 
         $registry->timer(self::NAME, [
             'connection' => $event->connectionName,
@@ -68,7 +80,7 @@ final class QueueJobMetrics implements MeterBinder
             'job' => $event->job->resolveName(),
             'outcome' => $outcome,
             ...$registry->tagsFor(self::NAME, $event),
-        ])->record($start === null ? 0.0 : (hrtime(true) - $start) / 1e9);
+        ])->record((hrtime(true) - $start) / 1e9);
 
         // A queue worker lives for many jobs and may never terminate cleanly.
         if ($this->app->runningInConsole()) {

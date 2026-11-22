@@ -13,6 +13,7 @@ use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Queue\Events\JobExceptionOccurred;
 use Illuminate\Queue\Events\JobProcessed;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Queue\Events\JobTimedOut;
 use Illuminate\Support\Facades\DB;
 use LogicException;
 use Mockery;
@@ -140,7 +141,9 @@ final class BuiltInMetersTest extends TestCase
         $schedule = $this->app->make(Schedule::class);
         $events = $this->app->make('events');
 
-        $report = $schedule->command('report:send');
+        // The arguments of a command can hold a secret: they are not part of the name.
+        $report = $schedule->command('report:send --token=secret');
+        $report->exitCode = 0;
         $events->dispatch(new ScheduledTaskStarting($report));
         $events->dispatch(new ScheduledTaskFinished($report, 1.5));
 
@@ -163,10 +166,52 @@ final class BuiltInMetersTest extends TestCase
         }
 
         $this->assertSame(
-            ['cleanup' => ['FAILED', 1.0], 'php artisan import:run' => ['FAILED', 1.0], 'php artisan report:send' => ['SUCCESS', 1.0]],
+            ['cleanup' => ['FAILED', 1.0], 'import:run' => ['FAILED', 1.0], 'report:send' => ['SUCCESS', 1.0]],
             $tasks,
         );
         $this->assertSame(1.5, $this->meters('tasks.scheduled.execution')[2]->sum);
+    }
+
+    #[Test]
+    public function a_task_that_did_not_run_is_not_a_success(): void
+    {
+        $schedule = $this->app->make(Schedule::class);
+        $events = $this->app->make('events');
+
+        // Laravel raises "finished" for a task it skipped because the previous run still holds the lock.
+        $skipped = $schedule->command('report:send')->withoutOverlapping();
+        $events->dispatch(new ScheduledTaskStarting($skipped));
+        $events->dispatch(new ScheduledTaskFinished($skipped, 0.0));
+
+        // A background task has no exit code yet either, but it was started.
+        $background = $schedule->command('import:run')->runInBackground();
+        $events->dispatch(new ScheduledTaskStarting($background));
+        $events->dispatch(new ScheduledTaskFinished($background, 0.0));
+
+        $tasks = array_map(static fn (MeterSnapshot $meter): string => $meter->tags['task'], $this->meters('tasks.scheduled.execution'));
+
+        $this->assertSame(['import:run'], $tasks);
+    }
+
+    #[Test]
+    public function a_job_that_timed_out_is_counted_once(): void
+    {
+        $events = $this->app->make('events');
+        $job = Mockery::mock(Job::class);
+        $job->allows('payload')->andReturn([]);
+        $job->allows('hasFailed')->andReturn(true);
+        $job->allows('getQueue')->andReturn('default');
+        $job->allows('resolveName')->andReturn('App\\Jobs\\SendInvoice');
+
+        // The worker kills itself after the timeout. When it is told not to, the exception follows.
+        $events->dispatch(new JobProcessing('redis', $job));
+        $events->dispatch(new JobTimedOut('redis', $job));
+        $events->dispatch(new JobExceptionOccurred('redis', $job, new RuntimeException('timed out')));
+
+        [$attempt] = $this->meters('queue.jobs');
+
+        $this->assertSame('FAILED', $attempt->tags['outcome']);
+        $this->assertSame(1.0, $attempt->count);
     }
 
     #[Test]

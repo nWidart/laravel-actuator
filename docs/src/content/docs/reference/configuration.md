@@ -307,8 +307,11 @@ which is seconds for a timer.
 A meter with buckets is rendered as a Prometheus histogram. A meter without an entry, or with an
 empty list, publishes only its count and sum. The `+Inf` bucket is always added.
 
-Each bound adds one series for each combination of tag values of the meter. After you change the
-bounds of a meter, the old and the new bounds are both listed until you
+Each bound adds one series for each combination of tag values of the meter.
+
+After you change the bounds of a meter, what was already counted moves to the next larger new
+bound. The totals from before the change are therefore less precise, but rates and percentiles
+over a period after the change are exact. To start afresh,
 [clear the store](/laravel-actuator/guides/choose-a-metrics-store/#clear-the-store).
 
 ## Visibility values

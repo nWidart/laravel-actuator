@@ -188,6 +188,26 @@ final class MeterRegistryTest extends TestCase
     }
 
     #[Test]
+    public function counts_stored_under_other_bounds_move_to_the_configured_ones(): void
+    {
+        $before = $this->registry(buckets: ['payment.charge' => [1, 10]]);
+
+        foreach ([0.3, 0.8, 4, 20] as $seconds) {
+            $before->timer('payment.charge')->record($seconds);
+        }
+
+        $before->flush();
+
+        // Finer bounds: what was counted as "at most 1" is still at most 2, and never "at most 0.5".
+        $finer = $this->only($this->registry(buckets: ['payment.charge' => [0.5, 2, 5]]));
+        $this->assertSame([[0.5, 0.0], [2.0, 2.0], [5.0, 2.0]], $finer->buckets);
+        $this->assertSame(4.0, $finer->count);
+
+        // No bounds any more: no bucket is left over.
+        $this->assertSame([], $this->only($this->registry())->buckets);
+    }
+
+    #[Test]
     public function a_summary_records_amounts_in_its_own_unit(): void
     {
         $registry = $this->registry(buckets: ['upload.size' => [1024]]);
@@ -302,6 +322,29 @@ final class MeterRegistryTest extends TestCase
 
         $this->assertSame(['module' => 'Blog'], $tags);
         $this->assertSame(['module' => 'Blog'], $this->only($registry)->tags);
+    }
+
+    #[Test]
+    public function work_done_by_a_contributor_is_not_measured_and_cannot_recurse(): void
+    {
+        $registry = $this->registry();
+        $calls = 0;
+
+        // Like a "db.queries" contributor that runs a query of its own.
+        $registry->tagUsing('db.queries', function () use ($registry, &$calls): array {
+            $calls++;
+            $registry->timer('db.queries', $registry->tagsFor('db.queries', new stdClass))->record(1);
+
+            return ['module' => 'Blog'];
+        });
+
+        $registry->timer('db.queries', $registry->tagsFor('db.queries', new stdClass))->record(0.1);
+        $registry->flush();
+
+        $meter = $this->only($registry);
+        $this->assertSame(1, $calls);
+        $this->assertSame(['module' => 'Blog'], $meter->tags);
+        $this->assertSame(1.0, $meter->count);
     }
 
     #[Test]

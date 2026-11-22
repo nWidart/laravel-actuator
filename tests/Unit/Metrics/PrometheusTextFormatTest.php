@@ -162,6 +162,23 @@ final class PrometheusTextFormatTest extends TestCase
     }
 
     #[Test]
+    public function a_sample_is_never_written_twice(): void
+    {
+        $output = $this->render([
+            new MeterSnapshot('orders.placed', MeterType::Counter, '', ['channel' => 'web'], value: 1),
+            new MeterSnapshot('orders_placed', MeterType::Counter, '', ['channel' => 'web'], value: 5),
+            new MeterSnapshot('orders_placed', MeterType::Counter, '', ['channel' => 'app'], value: 2),
+            new MeterSnapshot('wait', MeterType::Timer, 'seconds', [], count: 3, sum: 1),
+            new MeterSnapshot('wait.seconds.count', MeterType::Gauge, '', [], value: 9),
+        ]);
+
+        $this->assertSame(1, substr_count($output, 'orders_placed_total{channel="web"}'));
+        $this->assertStringContainsString("orders_placed_total{channel=\"web\"} 1\n", $output);
+        $this->assertStringContainsString("orders_placed_total{channel=\"app\"} 2\n", $output);
+        $this->assertSame(1, substr_count($output, "\nwait_seconds_count "));
+    }
+
+    #[Test]
     public function special_numbers_use_the_prometheus_spelling(): void
     {
         $output = $this->render([

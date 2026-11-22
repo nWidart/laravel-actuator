@@ -71,6 +71,32 @@ final class StoresTest extends TestCase
     }
 
     #[Test]
+    public function the_cache_store_clears_under_the_lock_of_the_writers(): void
+    {
+        $store = new CacheStore(Cache::store('array'), attempts: 1, wait: 1);
+        $store->write(['requests' => 1.0], []);
+
+        // A writer holds the lock: it has read the entry and will write it back.
+        $lock = Cache::store('array')->lock('actuator:metrics:lock', 5);
+        $this->assertTrue($lock->get());
+
+        try {
+            $store->clear();
+            $this->fail('A clear that a writer would undo must not report success.');
+        } catch (RuntimeException $e) {
+            $this->assertStringContainsString('the store is busy', $e->getMessage());
+        }
+
+        $this->assertSame(['requests' => 1.0], $store->read());
+
+        $lock->release();
+        $store->clear();
+
+        $this->assertSame([], $store->read());
+        $this->assertTrue(Cache::store('array')->lock('actuator:metrics:lock', 5)->get());
+    }
+
+    #[Test]
     public function the_cache_store_needs_a_cache_with_locks(): void
     {
         $cache = Mockery::mock(Repository::class);
@@ -117,7 +143,7 @@ final class StoresTest extends TestCase
                 && $key === 'actuator:metrics'
                 && $increments === '{"requests":1,"seconds":0.25}'
                 && $values === '{}';
-        });
+        })->andReturn(1);
 
         (new RedisStore($predis))->write(['requests' => 1.0, 'seconds' => 0.25], []);
 
@@ -126,7 +152,7 @@ final class StoresTest extends TestCase
             [, $arguments, $keys] = $parameters;
 
             return $method === 'eval' && $keys === 1 && $arguments === ['actuator:metrics', '{}', '{"queue.size":4}'];
-        });
+        })->andReturn(1);
 
         (new RedisStore($phpredis))->write([], ['queue.size' => 4.0]);
     }
@@ -142,6 +168,26 @@ final class StoresTest extends TestCase
 
         $this->assertSame(['requests' => 3.0, 'seconds' => 0.25], $store->read());
         $store->clear();
+    }
+
+    #[Test]
+    public function the_redis_store_fails_when_redis_refuses_a_command(): void
+    {
+        // phpredis answers false where predis throws.
+        $redis = Mockery::mock(PhpRedisConnection::class);
+        $redis->allows('command')->andReturn(false);
+        $store = new RedisStore($redis);
+
+        try {
+            $store->read();
+            $this->fail('A refused read must not look like an empty store.');
+        } catch (RuntimeException $e) {
+            $this->assertSame('Redis did not return the metrics.', $e->getMessage());
+        }
+
+        $this->expectExceptionMessage('Redis did not write the metrics.');
+
+        $store->write(['requests' => 1.0], []);
     }
 
     #[Test]

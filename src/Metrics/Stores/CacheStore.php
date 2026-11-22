@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Metrics\Stores;
 
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Contracts\Cache\LockProvider;
 use Illuminate\Contracts\Cache\Repository;
 use Nwidart\Actuator\Metrics\MetricsStore;
@@ -29,22 +30,11 @@ final readonly class CacheStore implements MetricsStore
 
     public function write(array $increments, array $values): void
     {
-        $store = $this->cache->getStore();
+        $lock = $this->lock($this->attempts);
 
-        if (! $store instanceof LockProvider) {
-            throw new RuntimeException('The cache store used for metrics must support locks. Use another cache store, or the "redis" metrics store.');
-        }
-
-        // The lock expires on its own, in case its owner dies before the release.
-        $lock = $store->lock(self::LOCK, 5);
-
-        for ($attempt = 1; ! $lock->get(); $attempt++) {
-            if ($attempt >= $this->attempts) {
-                // Losing a few measurements is better than keeping a worker busy.
-                return;
-            }
-
-            usleep($this->wait * 1000);
+        if ($lock === null) {
+            // Losing a few measurements is better than keeping a worker busy.
+            return;
         }
 
         try {
@@ -79,6 +69,42 @@ final readonly class CacheStore implements MetricsStore
 
     public function clear(): void
     {
-        $this->cache->forget(self::KEY);
+        // Without the lock, a writer that has already read the entry would write it back.
+        $lock = $this->lock($this->attempts * 100);
+
+        if ($lock === null) {
+            throw new RuntimeException('The metrics could not be cleared: the store is busy. Try again.');
+        }
+
+        try {
+            $this->cache->forget(self::KEY);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    /**
+     * The lock that guards the entry, or null when it stays taken.
+     */
+    private function lock(int $attempts): ?Lock
+    {
+        $store = $this->cache->getStore();
+
+        if (! $store instanceof LockProvider) {
+            throw new RuntimeException('The cache store used for metrics must support locks. Use another cache store, or the "redis" metrics store.');
+        }
+
+        // The lock expires on its own, in case its owner dies before the release.
+        $lock = $store->lock(self::LOCK, 5);
+
+        for ($attempt = 1; ! $lock->get(); $attempt++) {
+            if ($attempt >= $attempts) {
+                return null;
+            }
+
+            usleep($this->wait * 1000);
+        }
+
+        return $lock;
     }
 }

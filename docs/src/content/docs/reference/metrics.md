@@ -57,15 +57,17 @@ One observation for each attempt to run a queued job.
 | `RETRY`    | Threw, and the job will be attempted again.                              |
 | `FAILED`   | Threw or was marked as failed, and the job will not be attempted again.  |
 
-A job that throws twice and then succeeds counts two `RETRY` attempts and one `SUCCESS`. A queue
-worker writes its measurements to the store after each job.
+A job that throws twice and then succeeds counts two `RETRY` attempts and one `SUCCESS`. An attempt
+that the worker stops because it ran longer than its timeout counts as `RETRY` or `FAILED` too. A
+queue worker writes its measurements to the store after each job.
 
 The `queue` tag is only bounded when your queue names are. If you create queues at runtime, such as
 one for each tenant, replace the tag with a fixed value:
 `$metrics->tagUsing('queue.jobs', fn () => ['queue' => 'tenant'])`.
 
-Tag contributors receive `Illuminate\Queue\Events\JobProcessed`, or
-`Illuminate\Queue\Events\JobExceptionOccurred` when the job threw.
+Tag contributors receive `Illuminate\Queue\Events\JobProcessed`,
+`Illuminate\Queue\Events\JobExceptionOccurred` when the job threw, or
+`Illuminate\Queue\Events\JobTimedOut` when the worker stopped the job.
 
 ### `db.queries`
 
@@ -75,7 +77,7 @@ One observation for each database query, with the duration that Laravel measures
 | ------------ | ------------------------------------- |
 | `connection` | The database connection, such as `mysql` |
 
-The SQL is never a tag. Queries that the metrics store itself runs are not counted.
+The SQL is never a tag. Queries that the metrics store or a tag contributor runs are not counted.
 
 Tag contributors receive `Illuminate\Database\Events\QueryExecuted`.
 
@@ -101,14 +103,22 @@ One observation for each run of a scheduled task. The name is that of Spring Boo
 
 | Tag       | Values                                                                                     |
 | --------- | ------------------------------------------------------------------------------------------ |
-| `task`    | The [target](/laravel-actuator/reference/endpoints/scheduledtasks/#targets) of the task, as on the `scheduledtasks` endpoint |
+| `task`    | See below                                                                                  |
 | `outcome` | `SUCCESS`, or `FAILED` when the task threw or exited with a failure code                   |
 
-Skipped tasks are not counted. A task that runs in the background is timed until it has started,
-not until it has finished.
+| Task                                              | `task`                                    |
+| ------------------------------------------------- | ----------------------------------------- |
+| Has a `description()`                             | The description                           |
+| Artisan command, for example `command('report:send --date=today')` | The command name: `report:send` |
+| Shell command, for example `exec('backup.sh --all')` | The program: `backup.sh`               |
+| Closure or job without a description              | Laravel's summary, for example `Callback` or the job class |
 
-The target of a command includes its arguments. An argument that changes on each run, such as a
-date, creates a series for each value: give such a task a `description()`.
+The arguments of a command are never part of the tag: they can hold a secret, and they can change
+on each run. Two tasks that run the same command with other arguments therefore share a series.
+Give each a `description()` to tell them apart.
+
+Skipped tasks are not counted, including a `withoutOverlapping()` task whose previous run is still
+going. A task that runs in the background is timed until it has started, not until it has finished.
 
 Tag contributors receive `Illuminate\Console\Events\ScheduledTaskFinished`, or
 `Illuminate\Console\Events\ScheduledTaskFailed` when the task threw.

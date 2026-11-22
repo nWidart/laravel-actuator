@@ -136,17 +136,23 @@ final class MeterRegistry
      * A contributor is code from elsewhere, and it runs inside the request,
      * job or query it describes. So nothing it does may fail that work: a
      * contributor that throws is skipped, and so is a value that is not a
-     * string, a number or a boolean.
+     * string, a number or a boolean. What a contributor does is not measured.
      *
      * @return array<string, string|int|float|bool>
      */
     public function tagsFor(string $meter, object $context): array
     {
+        // A contributor can itself run a query or raise an exception. That work is
+        // not measured: measuring it would call the contributor again, without end.
+        if ($this->buffer->paused) {
+            return [];
+        }
+
         $tags = [];
 
         foreach ($this->contributors[$meter] ?? [] as $contributor) {
             try {
-                $contributed = $contributor($context);
+                $contributed = $this->withoutRecording(static fn (): mixed => $contributor($context));
             } catch (Throwable $e) {
                 $this->reportOnce($e);
 
@@ -307,32 +313,31 @@ final class MeterRegistry
      */
     private function snapshot(MeterId $id, array $statistics): MeterSnapshot
     {
-        // Every configured bucket is listed, also the ones nothing fell into
-        // yet: a histogram needs the same bounds on each of its series.
-        $counts = [];
-
-        foreach ($this->buckets[$id->name] ?? [] as $bound) {
-            $counts["le:{$bound}"] = 0.0;
-        }
+        // The buckets are always the configured ones, so that every series of a
+        // histogram has the same bounds. A count stored under another bound, from
+        // before a configuration change, moves to the next configured bound.
+        $bounds = $this->buckets[$id->name] ?? [];
+        $counts = array_fill(0, count($bounds), 0.0);
 
         foreach ($statistics as $statistic => $value) {
-            if (str_starts_with($statistic, 'le:')) {
-                $counts[$statistic] = $value;
+            if (! str_starts_with($statistic, 'le:')) {
+                continue;
+            }
+
+            foreach ($bounds as $index => $bound) {
+                if ((float) substr($statistic, 3) <= $bound) {
+                    $counts[$index] += $value;
+
+                    break;
+                }
             }
         }
 
-        $bounds = [];
-
-        foreach ($counts as $statistic => $count) {
-            $bounds[] = [(float) substr($statistic, 3), $count];
-        }
-
-        usort($bounds, static fn (array $a, array $b): int => $a[0] <=> $b[0]);
         $buckets = [];
         $cumulative = 0.0;
 
-        foreach ($bounds as [$bound, $count]) {
-            $buckets[] = [$bound, $cumulative += $count];
+        foreach ($bounds as $index => $bound) {
+            $buckets[] = [$bound, $cumulative += $counts[$index]];
         }
 
         return new MeterSnapshot(
