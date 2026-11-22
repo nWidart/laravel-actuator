@@ -112,6 +112,7 @@ final class EndpointRegistrationTest extends TestCase
         yield 'discovery route' => ['discovery', 'Actuator endpoint id [discovery] is reserved.'];
         yield 'middleware config key' => ['middleware', 'Actuator endpoint id [middleware] is reserved.'];
         yield 'exposure config key' => ['exposure', 'Actuator endpoint id [exposure] is reserved.'];
+        yield 'metrics config key' => ['metrics', 'Actuator endpoint id [metrics] is reserved.'];
         yield 'built-in id' => ['health', 'Actuator endpoint id [health] is already registered as [health].'];
         yield 'built-in id in another case' => ['scheduledTasks', 'Actuator endpoint id [scheduledTasks] is already registered as [scheduledtasks].'];
     }

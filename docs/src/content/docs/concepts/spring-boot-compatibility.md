@@ -18,8 +18,8 @@ reuses it, and an operator who knows one knows the other.
 ## What is the same
 
 **Paths.** `/actuator`, `/actuator/health`, `/actuator/health/{group}`,
-`/actuator/health/{component}`, `/actuator/info`, `/actuator/env`, `/actuator/mappings` and
-`/actuator/scheduledtasks`.
+`/actuator/health/{component}`, `/actuator/info`, `/actuator/env`, `/actuator/mappings`,
+`/actuator/scheduledtasks` and `/actuator/prometheus`.
 
 **Discovery.** `/actuator` returns HAL `_links`, including the templated `health-path` link.
 
@@ -34,6 +34,10 @@ reuses it, and an operator who knows one knows the other.
 
 **JSON formats.** `health`, `info`, `env` and `scheduledtasks` return the structures Spring Boot
 returns, so clients written for Spring Boot can parse them.
+
+**Metrics.** A meter registry with counters, gauges, timers and distribution summaries, tags and
+common tags, as in Micrometer. The request meter is `http.server.requests` with the tags `method`,
+`uri`, `status`, `outcome` and `exception`. See [the metrics model](/laravel-actuator/concepts/metrics-model/).
 
 **Exposure.** Only `health` is exposed by default, with `include` and `exclude` lists and the `*`
 wildcard.
@@ -56,6 +60,9 @@ lists what is left out.
 | `when_authorized`   | Spring Security roles                                | The `viewActuator` gate                               |
 | Liveness state      | An application state that the application can change | The `ping` indicator: alive while it can answer       |
 | Readiness state     | An application state that the application can change | Maintenance mode                                      |
+| Metrics storage     | The memory of the one JVM process                    | A store shared by the PHP processes: a cache store or Redis |
+| Metrics backends    | Many monitoring systems, and the JSON `metrics` endpoint | The `prometheus` endpoint                         |
+| Runtime meters      | JVM memory, threads, garbage collection              | OPcache and PHP-FPM                                   |
 | Other endpoints     | `metrics`, `loggers`, `beans`, `threaddump` and more | Not built in. Write a [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) |
 | Separate port       | `management.server.port`                             | Same server as the application                        |
 | Configuration       | `management.*` properties                            | `config/actuator.php`                                 |
@@ -76,6 +83,7 @@ the `_links` of `/actuator` and shows a view for each one it knows.
 | Environment      | Yes                                                    |
 | Scheduled tasks  | Yes                                                    |
 | Mappings         | No: the format differs                                 |
-| Metrics, loggers, threads and others | No: the endpoints do not exist      |
+| Metrics          | No: Spring Boot Admin reads the JSON `metrics` endpoint, which does not exist |
+| Loggers, threads and others | No: the endpoints do not exist               |
 
 See [monitor with Spring Boot Admin](/laravel-actuator/guides/spring-boot-admin/).

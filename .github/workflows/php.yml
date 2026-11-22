@@ -28,13 +28,25 @@ jobs:
           - laravel: '13.*'
             php: '8.2'
 
+    # The Redis metrics store is tested against a real server.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v7
 
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: pdo_sqlite
+          extensions: pdo_sqlite, redis
           coverage: none
 
       - name: Install dependencies

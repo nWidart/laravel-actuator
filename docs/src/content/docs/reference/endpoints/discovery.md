@@ -27,6 +27,7 @@ flag.
 | `env`            | `env` is exposed             | The env URL                             | `false`     |
 | `mappings`       | `mappings` is exposed        | The mappings URL                        | `false`     |
 | `scheduledtasks` | `scheduledtasks` is exposed  | The scheduled tasks URL                 | `false`     |
+| `prometheus`     | `prometheus` is exposed      | The Prometheus URL                      | `false`     |
 | `{id}`           | A custom endpoint is exposed | The endpoint URL                        | `false`     |
 | `{id}-{selector}` | A custom endpoint with a selector is exposed | The endpoint URL followed by `/{selector}` | `true` |
 

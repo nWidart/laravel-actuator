@@ -8,7 +8,7 @@ HTTP 404. The [discovery endpoint](/laravel-actuator/reference/endpoints/discove
 is always registered and lists only the exposed endpoints.
 
 :::caution
-`info`, `env`, `mappings` and `scheduledtasks` reveal details about your application.
+`info`, `env`, `mappings`, `scheduledtasks` and `prometheus` reveal details about your application.
 [Secure them](/laravel-actuator/guides/secure-endpoints/) before you expose them in production.
 :::
 
@@ -29,9 +29,12 @@ List the endpoint IDs in `exposure.include`:
 ],
 ```
 
-The built-in IDs are `health`, `info`, `env`, `mappings` and `scheduledtasks`. A
+The built-in IDs are `health`, `info`, `env`, `mappings`, `scheduledtasks` and `prometheus`. A
 [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) is exposed the same way, with
 the ID it was registered under. The `*` wildcard includes custom endpoints.
+
+Exposing `prometheus` also starts the collection of metrics, see
+[collect metrics with Prometheus](/laravel-actuator/guides/collect-metrics-with-prometheus/).
 
 ## Expose every endpoint
 

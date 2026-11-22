@@ -15,6 +15,7 @@ use Nwidart\Actuator\Http\Controllers\HealthController;
 use Nwidart\Actuator\Http\Controllers\InfoController;
 use Nwidart\Actuator\Http\Controllers\MappingsController;
 use Nwidart\Actuator\Http\Controllers\OperationController;
+use Nwidart\Actuator\Http\Controllers\PrometheusController;
 use Nwidart\Actuator\Http\Controllers\ScheduledTasksController;
 
 /**
@@ -27,7 +28,7 @@ final class EndpointRegistry
     /**
      * Ids that would collide with the discovery route name or a configuration key.
      */
-    private const RESERVED = ['discovery', 'exposure', 'middleware'];
+    private const RESERVED = ['discovery', 'exposure', 'middleware', 'metrics'];
 
     /**
      * @var array<string, class-string>
@@ -38,6 +39,7 @@ final class EndpointRegistry
         'env' => EnvController::class,
         'mappings' => MappingsController::class,
         'scheduledtasks' => ScheduledTasksController::class,
+        'prometheus' => PrometheusController::class,
     ];
 
     private bool $routesLoaded = false;

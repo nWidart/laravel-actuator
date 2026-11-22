@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature;
 
+use Illuminate\Foundation\Http\Events\RequestHandled;
 use Illuminate\Support\Facades\Route;
+use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Actuator\Tests\TestCase;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
 use PHPUnit\Framework\Attributes\Test;
@@ -40,9 +42,19 @@ final class EndpointsTest extends TestCase
             ],
         ]);
 
-        foreach (['info', 'env', 'mappings', 'scheduledtasks'] as $endpoint) {
+        foreach (['info', 'env', 'mappings', 'scheduledtasks', 'prometheus'] as $endpoint) {
             $this->getJson("/actuator/{$endpoint}")->assertNotFound();
         }
+    }
+
+    #[Test]
+    public function metrics_are_not_collected_while_prometheus_is_not_exposed(): void
+    {
+        $this->getJson('/actuator/health')->assertOk();
+
+        $this->assertFalse($this->app->resolved(MeterRegistry::class));
+        $this->assertFalse($this->app->make('events')->hasListeners(RequestHandled::class));
+        $this->assertFalse($this->app->make(MeterRegistry::class)->enabled('orders.placed'));
     }
 
     #[Test]
@@ -50,10 +62,10 @@ final class EndpointsTest extends TestCase
     public function a_wildcard_exposes_every_endpoint(): void
     {
         $this->getJson('/actuator')->assertOk()->assertJsonStructure([
-            '_links' => ['self', 'health', 'health-path', 'info', 'env', 'mappings', 'scheduledtasks'],
+            '_links' => ['self', 'health', 'health-path', 'info', 'env', 'mappings', 'scheduledtasks', 'prometheus'],
         ]);
 
-        foreach (['health', 'info', 'env', 'mappings', 'scheduledtasks'] as $endpoint) {
+        foreach (['health', 'info', 'env', 'mappings', 'scheduledtasks', 'prometheus'] as $endpoint) {
             $this->getJson("/actuator/{$endpoint}")->assertOk();
         }
     }

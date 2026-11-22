@@ -5,7 +5,7 @@
 [![CI](https://img.shields.io/github/actions/workflow/status/nwidart/laravel-actuator/php.yml?branch=master&style=flat-square)](https://github.com/nwidart/laravel-actuator/actions/workflows/php.yml)
 [![Total Downloads](https://img.shields.io/packagist/dt/nwidart/laravel-actuator.svg?style=flat-square)](https://packagist.org/packages/nwidart/laravel-actuator)
 
-Production-ready endpoints to monitor your Laravel application: health checks for Kubernetes probes and load balancers, build and runtime info, configuration, routes and scheduled tasks.
+Production-ready endpoints to monitor your Laravel application: health checks for Kubernetes probes and load balancers, metrics for Prometheus, build and runtime info, configuration, routes and scheduled tasks.
 
 **Documentation: [nwidart.github.io/laravel-actuator](https://nwidart.github.io/laravel-actuator/)**
 
@@ -38,6 +38,7 @@ php artisan vendor:publish --tag=actuator-config
 | `env`            | `/actuator/env`                     | Configuration and environment variables.         | No                 |
 | `mappings`       | `/actuator/mappings`                | Registered routes.                               | No                 |
 | `scheduledtasks` | `/actuator/scheduledtasks`          | Tasks registered in the scheduler.               | No                 |
+| `prometheus`     | `/actuator/prometheus`              | Metrics, in the Prometheus text format.          | No                 |
 
 ### Exposure
 
@@ -54,7 +55,7 @@ Change the `/actuator` prefix with `base_path` (or `ACTUATOR_BASE_PATH`).
 
 ### Securing endpoints
 
-`info`, `env`, `mappings` and `scheduledtasks` reveal details about your application. Before you expose them, protect them with middleware. The top-level `middleware` applies to every actuator route. Each endpoint can add its own, so `health` stays public for probes:
+`info`, `env`, `mappings`, `scheduledtasks` and `prometheus` reveal details about your application. Before you expose them, protect them with middleware. The top-level `middleware` applies to every actuator route. Each endpoint can add its own, so `health` stays public for probes:
 
 ```php
 'middleware' => [],
@@ -235,6 +236,112 @@ Lists every route with its methods, URI, name, action, middleware and domain.
 ## Scheduled tasks
 
 Lists the tasks of the Laravel scheduler in the Spring Boot format. Tasks that run every minute or less often are listed under `cron`, with their next execution time. Sub-minute tasks (`everyTenSeconds()` and similar) are listed under `fixedRate`, with an interval in milliseconds.
+
+## Metrics
+
+Expose the `prometheus` endpoint to collect metrics and let a [Prometheus](https://prometheus.io) server scrape them:
+
+```php
+'exposure' => [
+    'include' => ['health', 'prometheus'],
+],
+```
+
+```bash
+curl http://localhost/actuator/prometheus
+```
+
+```text
+# HELP http_server_requests_seconds Duration of HTTP server request handling.
+# TYPE http_server_requests_seconds histogram
+http_server_requests_seconds_bucket{exception="none",method="GET",outcome="SUCCESS",status="200",uri="/users/{user}",le="0.1"} 3
+http_server_requests_seconds_count{exception="none",method="GET",outcome="SUCCESS",status="200",uri="/users/{user}"} 3
+http_server_requests_seconds_sum{exception="none",method="GET",outcome="SUCCESS",status="200",uri="/users/{user}"} 0.0241
+```
+
+Nothing is recorded while the endpoint is not exposed. The model follows [Micrometer](https://docs.spring.io/spring-boot/reference/actuator/metrics.html), the metrics library of Spring Boot: a meter registry, counters, gauges, timers and distribution summaries, with tags.
+
+### Built-in meters
+
+| Meter                       | Prometheus name                     | Tags                                              |
+|-----------------------------|-------------------------------------|---------------------------------------------------|
+| `http.server.requests`      | `http_server_requests_seconds`      | `method`, `uri`, `status`, `outcome`, `exception` |
+| `queue.jobs`                | `queue_jobs_seconds`                | `connection`, `queue`, `job`, `outcome`           |
+| `db.queries`                | `db_queries_seconds`                | `connection`                                      |
+| `exceptions`                | `exceptions_total`                  | `exception`                                       |
+| `tasks.scheduled.execution` | `tasks_scheduled_execution_seconds` | `task`, `outcome`                                 |
+
+`uri` is the route pattern (`/users/{user}`), never the raw path. There are also gauges for PHP, OPcache, PHP-FPM, the system load and the disk. Turn meters off by name prefix:
+
+```php
+'metrics' => [
+    'enable' => ['db.queries' => false, 'php' => false],
+],
+```
+
+### Storage
+
+PHP processes share no memory, so the measurements are kept in a store that web workers, queue workers and the scheduler all write to. Each process writes once, at the end of the request, job or command.
+
+| Store             | Setup                              | Use it for                      |
+|-------------------|------------------------------------|---------------------------------|
+| `cache` (default) | None. Uses your default cache store. | Development, small applications |
+| `redis`           | `ACTUATOR_METRICS_STORE=redis`     | Production                      |
+
+You can also name your own class that implements `MetricsStore`. With a shared store, every server returns the totals of the whole application: scrape one address, not each server. `php artisan actuator:metrics:clear` empties the store.
+
+### Custom metrics
+
+Inject `MeterRegistry`:
+
+```php
+use Nwidart\Actuator\Metrics\MeterRegistry;
+
+final class PlaceOrder
+{
+    public function __construct(private MeterRegistry $metrics) {}
+
+    public function handle(Order $order): void
+    {
+        $this->metrics->counter('orders.placed', ['channel' => $order->channel])->increment();
+
+        $this->metrics->timer('payment.charge', ['provider' => 'stripe'])->time(fn () => $this->charge($order));
+    }
+}
+```
+
+```text
+orders_placed_total{channel="web"} 1
+payment_charge_seconds_count{provider="stripe"} 1
+payment_charge_seconds_sum{provider="stripe"} 0.153
+```
+
+A gauge takes a callback that is read during the scrape, or a value that you set:
+
+```php
+$metrics->gauge('queue.size', ['queue' => 'default'], fn () => Queue::size('default'));
+$metrics->gauge('backup.last.success', unit: 'seconds')->set(time());
+```
+
+### Tags on the built-in meters
+
+An application or a package adds its own tag to a built-in meter with `tagUsing()`. The callback receives the Laravel event of the measurement:
+
+```php
+use Illuminate\Foundation\Http\Events\RequestHandled;
+use Nwidart\Actuator\Metrics\MeterRegistry;
+
+public function boot(): void
+{
+    $this->callAfterResolving(MeterRegistry::class, function (MeterRegistry $metrics): void {
+        $metrics->tagUsing('http.server.requests', fn (RequestHandled $event): array => [
+            'module' => Modules::ofRoute($event->request->route()) ?? 'none',
+        ]);
+    });
+}
+```
+
+Keep the set of tag values small and fixed: each value is a series of its own.
 
 ## Custom endpoints
 

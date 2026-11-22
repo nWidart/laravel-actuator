@@ -60,6 +60,15 @@ export default defineConfig({
 							items: [{ slug: 'guides/add-build-info' }, { slug: 'guides/write-an-info-contributor' }],
 						},
 						{
+							label: 'Metrics',
+							items: [
+								{ slug: 'guides/collect-metrics-with-prometheus' },
+								{ slug: 'guides/choose-a-metrics-store' },
+								{ slug: 'guides/record-custom-metrics' },
+								{ slug: 'guides/tag-built-in-metrics' },
+							],
+						},
+						{
 							label: 'Deployment',
 							items: [
 								{ slug: 'guides/kubernetes-probes' },
@@ -86,11 +95,13 @@ export default defineConfig({
 								{ slug: 'reference/endpoints/env' },
 								{ slug: 'reference/endpoints/mappings' },
 								{ slug: 'reference/endpoints/scheduledtasks' },
+								{ slug: 'reference/endpoints/prometheus' },
 							],
 						},
 						{ slug: 'reference/custom-endpoints' },
 						{ slug: 'reference/health-indicators' },
 						{ slug: 'reference/info-contributors' },
+						{ slug: 'reference/metrics' },
 						{ slug: 'reference/php-api' },
 					],
 				},
@@ -100,6 +111,7 @@ export default defineConfig({
 						{ slug: 'concepts/spring-boot-compatibility' },
 						{ slug: 'concepts/health-model' },
 						{ slug: 'concepts/liveness-and-readiness' },
+						{ slug: 'concepts/metrics-model' },
 						{ slug: 'concepts/security-model' },
 					],
 				},

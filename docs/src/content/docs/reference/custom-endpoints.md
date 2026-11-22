@@ -33,9 +33,9 @@ the endpoint middleware, and the prefix of the route names and discovery links.
 | Rule      | Description                                                                                      |
 | --------- | ------------------------------------------------------------------------------------------------ |
 | Format    | Starts with a lowercase letter, then letters and digits only: `^[a-z][a-zA-Z0-9]*$`.             |
-| Reserved  | `discovery`, `exposure` and `middleware`.                                                        |
+| Reserved  | `discovery`, `exposure`, `middleware` and `metrics`.                                             |
 | Unique    | An ID can be registered once. The comparison ignores case, so `scheduledTasks` collides with `scheduledtasks`. |
-| Built-in  | `health`, `info`, `env`, `mappings` and `scheduledtasks` are already registered.                 |
+| Built-in  | `health`, `info`, `env`, `mappings`, `scheduledtasks` and `prometheus` are already registered.   |
 
 A rejected ID throws `InvalidArgumentException` from `Actuator::endpoint()`.
 
