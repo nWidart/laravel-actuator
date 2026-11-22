@@ -24,7 +24,8 @@ use Throwable;
  */
 final class MeterRegistry
 {
-    private const SCOPE = 'nwidart/laravel-actuator';
+    /** The instrumentation scope of every meter this registry creates. */
+    public const SCOPE = 'nwidart/laravel-actuator';
 
     /** Micrometer base units => OpenTelemetry (UCUM) units. */
     private const UNITS = ['seconds' => 's', 'milliseconds' => 'ms', 'bytes' => 'By'];
@@ -43,7 +44,7 @@ final class MeterRegistry
     /** @var array<string, string> */
     private array $descriptions = [];
 
-    /** @var array<string, array{type: 'counter'|'gauge', unit: ?string, series: array<string, array{tags: array<non-empty-string, string|int|float|bool>, value: Closure(): (int|float|null)}>}> */
+    /** @var array<string, array{type: 'counter'|'gauge', name: string, unit: ?string, series: array<string, array{tags: array<non-empty-string, string|int|float|bool>, value: Closure(): (int|float|null)}>}> */
     private array $observed = [];
 
     /** @var array<string, list<float>> */
@@ -110,7 +111,9 @@ final class MeterRegistry
             return new Gauge(null, $tags);
         }
 
-        return new Gauge($this->gauges[$name] ??= $this->meter()->createGauge($name, self::unit($unit), $this->descriptions[$name] ?? null), $tags);
+        $unit = self::unit($unit);
+
+        return new Gauge($this->gauges[self::key($name, $unit)] ??= $this->meter()->createGauge($name, $unit, $this->descriptions[$name] ?? null), $tags);
     }
 
     /**
@@ -203,7 +206,7 @@ final class MeterRegistry
         }
 
         // No configured bounds: one bucket, so the histogram keeps only its count and sum.
-        return $this->histograms[$name] ??= $this->meter()->createHistogram($name, $unit, $this->descriptions[$name] ?? null, ['ExplicitBucketBoundaries' => $this->buckets[$name] ?? []]);
+        return $this->histograms[self::key($name, $unit)] ??= $this->meter()->createHistogram($name, $unit, $this->descriptions[$name] ?? null, ['ExplicitBucketBoundaries' => $this->buckets[$name] ?? []]);
     }
 
     /**
@@ -214,9 +217,12 @@ final class MeterRegistry
     private function observe(string $type, string $name, ?string $unit, array $tags, Closure $value): void
     {
         $first = $this->observed === [];
-        $this->observed[$name] ??= ['type' => $type, 'unit' => $unit, 'series' => []];
-        // The same meter and tags registered again replace the callback, as they do in Micrometer.
-        $this->observed[$name]['series'][serialize($tags)] = ['tags' => $tags, 'value' => $value];
+        $meter = $type.':'.self::key($name, $unit);
+        $this->observed[$meter] ??= ['type' => $type, 'name' => $name, 'unit' => $unit, 'series' => []];
+        // The same meter and tags registered again replace the callback, as they do in Micrometer,
+        // whatever the order of the tags.
+        ksort($tags);
+        $this->observed[$meter]['series'][serialize($tags)] = ['tags' => $tags, 'value' => $value];
 
         if ($first) {
             $this->metrics->onExport(fn (MeterProviderInterface $provider) => $this->createObserved($provider));
@@ -227,7 +233,8 @@ final class MeterRegistry
     {
         $meter = $provider->getMeter(self::SCOPE);
 
-        foreach ($this->observed as $name => $observed) {
+        foreach ($this->observed as $observed) {
+            $name = $observed['name'];
             $callback = function (ObserverInterface $observer) use ($observed): void {
                 foreach ($observed['series'] as $series) {
                     try {
@@ -271,6 +278,12 @@ final class MeterRegistry
         }
 
         return $attributes;
+    }
+
+    /** Instruments are kept by name and unit: the same name with another unit is another metric. */
+    private static function key(string $name, ?string $unit): string
+    {
+        return $name."\0".$unit;
     }
 
     private static function unit(string $unit): ?string

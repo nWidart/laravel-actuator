@@ -248,7 +248,8 @@ A key matches a meter with the same name, and every meter whose name starts with
 by a dot. `orders` matches `orders.placed` but not `ordersx`. When several keys match, the longest
 wins. A meter that no key matches is on.
 
-A meter that is off records nothing. The series it recorded before stay in the store until you
+A meter that is off records nothing, and the `prometheus` endpoint no longer serves the series it
+recorded before. Those series stay in the store until you
 [clear the store](/laravel-actuator/guides/choose-a-metrics-store/#clear-the-store).
 
 ### `metrics.distribution.slo`

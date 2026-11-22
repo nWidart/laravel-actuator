@@ -13,6 +13,7 @@ use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Metrics\AttributeContributors;
 use Nwidart\Metrics\Metrics;
 use Nwidart\Metrics\MetricsServiceProvider;
+use OpenTelemetry\SDK\Metrics\Data\Metric;
 
 final class ActuatorServiceProvider extends ServiceProvider
 {
@@ -65,6 +66,12 @@ final class ActuatorServiceProvider extends ServiceProvider
         // Applications register callback gauges and tag contributors when the registry is resolved
         // (callAfterResolving). Build it on every request, so that they exist in the scrape and in
         // the requests they tag. It holds no meter until one is used.
-        $this->app->make(MeterRegistry::class);
+        $registry = $this->app->make(MeterRegistry::class);
+
+        // A meter turned off by an "enable" prefix also stops serving the series it stored before.
+        if (config()->array('actuator.metrics.enable', []) !== []) {
+            $this->app->make(Metrics::class)->exclude(static fn (Metric $metric): bool => $metric->instrumentationScope->getName() === MeterRegistry::SCOPE
+                && ! $registry->enabled($metric->name));
+        }
     }
 }
