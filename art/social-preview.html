@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+  Source of social-preview.png, the GitHub social preview (Settings > Social preview). Render from this directory:
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+    --force-device-scale-factor=1 --virtual-time-budget=8000 --window-size=1280,640 \
+    --screenshot="$PWD/social-preview.png" "file://$PWD/social-preview.html"
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;600&display=block">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 640px; background: #0c0d10; overflow: hidden; }
+  body { font-family: 'Inter', sans-serif; color: #f4f4f5; position: relative; }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at 50% 45%, #000 25%, transparent 75%);
+  }
+  .glow {
+    position: absolute; width: 900px; height: 900px; left: 190px; top: -520px;
+    background: radial-gradient(circle, rgba(229,72,77,.25), transparent 62%);
+  }
+  .pulse { position: absolute; left: 0; top: 268px; opacity: .5; }
+  .wrap { position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; padding-top: 92px; }
+  .mark { width: 120px; height: 120px; filter: drop-shadow(0 12px 36px rgba(229,72,77,.5)); }
+  h1 { margin-top: 34px; font-size: 84px; font-weight: 800; letter-spacing: -2.6px; line-height: 1; }
+  h1 span { color: #e5484d; }
+  p.tag { margin-top: 24px; font-size: 28px; color: #a1a1aa; }
+  .chips { margin-top: 38px; display: flex; gap: 10px; }
+  .chips span {
+    font-family: 'JetBrains Mono', monospace; font-size: 18px; color: #d4d4d8;
+    padding: 7px 15px; border-radius: 999px; border: 1px solid #2a2b31; background: #15161a;
+  }
+  .chips span.on { color: #4ade80; border-color: #1f4d33; background: #0f1d15; }
+  .foot {
+    position: absolute; bottom: 52px; left: 0; right: 0; text-align: center;
+    font-family: 'JetBrains Mono', monospace; font-size: 20px; color: #71717a;
+  }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="glow"></div>
+  <svg class="pulse" viewBox="0 0 1280 60" width="1280" height="60">
+    <path d="M0 30 H170 l12-22 20 44 12-22 H1068 l12-22 20 44 12-22 H1280" fill="none" stroke="#e5484d" stroke-width="1.5" stroke-opacity=".55"/>
+  </svg>
+  <div class="wrap">
+    <svg class="mark" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#e5484d"/><path d="M5 17h5l3-8 6 15 3-7h5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <h1>Laravel <span>Actuator</span></h1>
+    <p class="tag">Production-ready endpoints to monitor your Laravel application.</p>
+    <div class="chips">
+      <span class="on">● health UP</span><span>info</span><span>env</span><span>mappings</span><span>scheduledtasks</span><span>prometheus</span>
+    </div>
+  </div>
+  <div class="foot">github.com/nwidart/laravel-actuator</div>
+</body>
+</html>
