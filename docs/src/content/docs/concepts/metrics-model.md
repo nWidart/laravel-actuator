@@ -16,8 +16,7 @@ through the OpenTelemetry SDK and keeps them in a store.
 
 ## Meters, names and tags
 
-`MeterRegistry` is modelled on [Micrometer](https://micrometer.io), the metrics library of Spring
-Boot. Underneath, each meter is an OpenTelemetry instrument.
+Each meter of `MeterRegistry` is an OpenTelemetry instrument.
 
 A **meter** measures one thing. It has a dotted name, such as `orders.placed`, and **tags**: pairs
 of a name and a value, such as `channel=web`. The same name with other tag values is another series
@@ -41,9 +40,6 @@ metrics can be pushed over OTLP with the
 [`metrics:push` command](https://github.com/nWidart/laravel-metrics#otlp-push) of laravel-metrics.
 
 ## Why a store
-
-A Java application is one long-lived process. Micrometer keeps its meters in memory, and the
-endpoint reads that memory.
 
 A PHP application is many short-lived processes that share nothing. A web worker forgets everything
 at the end of a request. Queue workers and the scheduler are other processes, often on other
@@ -119,6 +115,6 @@ Until then it publishes only its count and sum.
 | --------------------------------------------- | ------------------------------------------------------------------------- |
 | The JSON `metrics` endpoint of Spring Boot    | Not yet.                                                                  |
 | Client-side percentiles and maximum values    | Cannot be combined across processes. Use histogram buckets.               |
-| `@Timed`, long task timers                    | Use `Timer::time()`.                                                      |
+| Timing attributes, long task timers           | Use `Timer::time()`.                                                      |
 | Process meters: threads, CPU time, memory     | A PHP process serves one request. OPcache and PHP-FPM metrics take their place. |
 | HTTP client and mail metrics                  | Not yet.                                                                  |
