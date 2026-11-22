@@ -13,6 +13,8 @@ All notable changes to `laravel-actuator` will be documented in this file.
 
 ### Changed
 
+- Requires nwidart/laravel-metrics `^0.3`.
+- The sample Grafana dashboard shows the new database and Eloquent metrics in its Database row. Its "Queries per request" panel becomes "p95 queries per request, top routes", from `laravel.db.queries`.
 - Without a published `config/actuator.php`, `/actuator/health` and `/actuator/health/readiness` now answer `OUT_OF_SERVICE` (HTTP 503) while migrations are pending. A published configuration keeps its own indicators and groups: add `'migrations' => MigrationsHealthIndicator::class` to `health.indicators`, and `migrations` to the `readiness` group, to get the check.
 
 ## 1.2.0 - 2026-11-22
