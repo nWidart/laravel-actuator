@@ -29,6 +29,7 @@ It uses the same paths and the same status semantics. The `health`, `info`, `env
 | [`env`](/laravel-actuator/reference/endpoints/env/)                   | `/actuator/env`            | How is it configured?                      | No                 |
 | [`mappings`](/laravel-actuator/reference/endpoints/mappings/)         | `/actuator/mappings`       | Which routes does it serve?                | No                 |
 | [`scheduledtasks`](/laravel-actuator/reference/endpoints/scheduledtasks/) | `/actuator/scheduledtasks` | What does the scheduler run, and when? | No                 |
+| [`prometheus`](/laravel-actuator/reference/endpoints/prometheus/)     | `/actuator/prometheus`     | How much work does it do, and how fast?    | No                 |
 
 Only `health` is exposed by default, and it shows only an overall status. Everything else is opt-in.
 The [security model](/laravel-actuator/concepts/security-model/) explains why.

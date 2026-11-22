@@ -173,6 +173,102 @@ final class Selector
 | `DeleteOperation`    | Method    | The method answers `DELETE`.                                              |
 | `Selector`           | Parameter | The parameter is a path segment. `remaining: true` matches the whole remaining path. |
 
+## `MeterRegistry`
+
+```php
+namespace Nwidart\Actuator\Metrics;
+
+final class MeterRegistry
+```
+
+Creates meters and reads them back. It is a container singleton: inject it, or resolve it with
+`app(MeterRegistry::class)`. In a service provider, use
+`$this->callAfterResolving(MeterRegistry::class, ...)`. See
+[record your own metrics](/laravel-actuator/guides/record-custom-metrics/).
+
+Tags are an `array<string, string|int|float|bool>`. Values are converted to strings.
+
+| Method                                                                        | Description                                                        |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `counter(string $name, array $tags = [], ?Closure $value = null): Counter`    | A total that only goes up. With `$value`, the total is read from the callback during the scrape. |
+| `gauge(string $name, array $tags = [], ?Closure $value = null, string $unit = ''): Gauge` | A value that goes up and down. With `$value`, it is read from the callback during the scrape. A callback that returns `null` leaves the gauge out. |
+| `timer(string $name, array $tags = []): Timer`                                | Counts events and their duration in seconds.                       |
+| `summary(string $name, array $tags = [], string $unit = ''): DistributionSummary` | Counts events and the sum of an amount.                        |
+| `tagUsing(string $meter, Closure $callback): void`                            | Adds tags to a meter recorded by someone else. The callback receives the object the measurement is about and returns an array of tags. See [add tags to the built-in metrics](/laravel-actuator/guides/tag-built-in-metrics/). |
+| `tagsFor(string $meter, object $context): array`                              | The tags that the `tagUsing()` callbacks of the meter return for `$context`. A callback that throws is skipped, and so is a value that is not a string, a number or a boolean. |
+| `describe(string $name, string $description): void`                           | Sets the help text of a meter.                                     |
+| `enabled(string $name): bool`                                                 | Whether the meter is recorded.                                     |
+| `flush(): void`                                                               | Writes the buffered measurements to the store. Called for you at the end of each request, job and command. Never throws: a store failure is reported once per process. |
+| `collect(): array`                                                            | Every enabled meter as a list of `MeterSnapshot`. Throws when the store cannot be read. |
+| `clear(): void`                                                               | Removes every stored series.                                       |
+
+When metrics are not collected, the meters do nothing, `enabled()` returns `false` and `collect()`
+returns an empty list.
+
+## Meters
+
+All four are `final` classes in `Nwidart\Actuator\Metrics`, created by the registry.
+
+| Class                 | Method                                   | Description                                                   |
+| --------------------- | ---------------------------------------- | ------------------------------------------------------------- |
+| `Counter`             | `increment(float $amount = 1.0): void`   | Adds to the total. A negative amount throws `InvalidArgumentException`. |
+| `Gauge`               | `set(float $value): void`                | Stores the value. The last value wins.                        |
+| `Timer`               | `record(float $seconds): void`           | Records one duration. A negative duration counts as zero.     |
+| `Timer`               | `time(Closure $callback): mixed`         | Runs the callback, records its duration, also when it throws, and returns its result. |
+| `DistributionSummary` | `record(float $amount): void`            | Records one amount.                                           |
+
+A value that is not finite (`NAN`, `INF`) is ignored by every meter.
+
+## `MeterSnapshot`
+
+```php
+namespace Nwidart\Actuator\Metrics;
+
+final readonly class MeterSnapshot
+{
+    public string $name;        // 'http.server.requests'
+    public MeterType $type;     // Counter, Gauge, Timer or Summary
+    public string $unit;        // 'seconds', 'bytes' or ''
+    public array $tags;         // ['method' => 'GET']
+    public string $description;
+    public float $value;        // counter total or gauge value
+    public float $count;        // timer and summary: number of observations
+    public float $sum;          // timer and summary: sum of the observations
+    public array $buckets;      // timer and summary: [[upper bound, cumulative count], ...]
+}
+```
+
+The state of one meter, as `MeterRegistry::collect()` returns it. It carries the dotted name and
+the base unit, not the names of a monitoring system.
+
+## `MetricsStore`
+
+```php
+namespace Nwidart\Actuator\Metrics;
+
+interface MetricsStore
+{
+    /**
+     * @param array<string, float> $increments
+     * @param array<string, float> $values
+     */
+    public function write(array $increments, array $values): void;
+
+    /** @return array<string, float> */
+    public function read(): array;
+
+    public function clear(): void;
+}
+```
+
+Keeps the series between requests. `write()` adds each increment to its series and overwrites each
+series in `$values`. An increment must not be lost when two processes write at the same time. The
+keys are opaque strings. See
+[write your own store](/laravel-actuator/guides/choose-a-metrics-store/#write-your-own-store).
+
+The built-in stores are `Nwidart\Actuator\Metrics\Stores\CacheStore` and
+`Nwidart\Actuator\Metrics\Stores\RedisStore`.
+
 ## Built-in implementations
 
 - Health indicators: see [health indicators](/laravel-actuator/reference/health-indicators/).
@@ -184,6 +280,14 @@ The built-in classes are `final`. To change one, write your own class that imple
 
 `Nwidart\Actuator\ActuatorServiceProvider` merges the configuration, publishes it under the
 `actuator-config` tag, registers the routes, and adds `base_path` to the maintenance mode exceptions.
+It binds `MeterRegistry` and `MetricsStore` as singletons and, when metrics are collected, registers
+the listeners of the built-in meters.
+
+## Artisan commands
+
+| Command                              | Description                          |
+| ------------------------------------ | ------------------------------------ |
+| `php artisan actuator:metrics:clear` | Removes every series from the metrics store. |
 
 ## Routes
 
@@ -196,6 +300,7 @@ The built-in classes are `final`. To change one, write your own class that imple
 | `actuator.env`             | `/{base_path}/env`           |
 | `actuator.mappings`        | `/{base_path}/mappings`      |
 | `actuator.scheduledtasks`  | `/{base_path}/scheduledtasks` |
+| `actuator.prometheus`      | `/{base_path}/prometheus`    |
 
 Only exposed endpoints have a route. Use the names with `route()`, for example
 `route('actuator.health')`. For the route names of a custom endpoint, see

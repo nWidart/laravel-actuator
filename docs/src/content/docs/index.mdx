@@ -39,6 +39,10 @@ curl http://localhost/actuator/health
 		`health`, `info`, `env` and `scheduledtasks` use the Spring Boot JSON, so tools such as Spring
 		Boot Admin can read them.
 	</Card>
+	<Card title="Metrics for Prometheus" icon="rocket">
+		Requests, queued jobs, database queries, exceptions and scheduled tasks, ready to scrape. Add
+		your own counters and timers.
+	</Card>
 	<Card title="Safe by default" icon="warning">
 		Only `health` is exposed, and it hides its details. Add middleware and a gate before you open
 		anything else.

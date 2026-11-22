@@ -12,6 +12,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Date;
 use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
+use Nwidart\Actuator\Support\ScheduledTaskTarget;
 
 /**
  * Scheduled tasks, in the Spring Boot "scheduledtasks" format.
@@ -29,7 +30,7 @@ final class ScheduledTasksController
         $fixedRate = [];
 
         foreach ($app->make(Schedule::class)->events() as $event) {
-            $runnable = ['target' => $this->target($event)];
+            $runnable = ['target' => ScheduledTaskTarget::of($event)];
 
             if ($event->isRepeatable()) {
                 $fixedRate[] = ['runnable' => $runnable, 'initialDelay' => 0, 'interval' => $event->repeatSeconds * 1000];
@@ -46,15 +47,6 @@ final class ScheduledTasksController
         }
 
         return new JsonResponse(['cron' => $cron, 'fixedDelay' => [], 'fixedRate' => $fixedRate, 'custom' => []]);
-    }
-
-    private function target(Event $event): string
-    {
-        if (is_string($event->description) || $event->command === null) {
-            return $event->getSummaryForDisplay();
-        }
-
-        return Event::normalizeCommand($event->command);
     }
 
     private function timezone(Event $event): string

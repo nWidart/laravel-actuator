@@ -47,8 +47,8 @@ return [
     |
     | Endpoints reachable over HTTP. Use '*' to expose all of them. An
     | excluded endpoint is never exposed, even when it is included.
-    | Available: health, info, env, mappings, scheduledtasks, and each
-    | custom endpoint registered with Actuator::endpoint().
+    | Available: health, info, env, mappings, scheduledtasks, prometheus,
+    | and each custom endpoint registered with Actuator::endpoint().
     |
     */
 
@@ -140,6 +140,57 @@ return [
 
     'scheduledtasks' => [
         'middleware' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Prometheus endpoint and metrics
+    |--------------------------------------------------------------------------
+    |
+    | Metrics are collected while "enabled" is true and the "prometheus"
+    | endpoint is exposed. PHP processes share no memory, so they are
+    | kept in a store:
+    |
+    | "cache"  one entry in a Laravel cache store, written under a lock.
+    |          No setup, for development and small applications.
+    | "redis"  one hash on a Laravel Redis connection. For production.
+    |
+    | Any other value is the class name of your own MetricsStore.
+    |
+    */
+
+    'prometheus' => [
+        'middleware' => [],
+    ],
+
+    'metrics' => [
+        'enabled' => env('ACTUATOR_METRICS_ENABLED', true),
+
+        'store' => env('ACTUATOR_METRICS_STORE', 'cache'),
+
+        // The cache store to use. Null is the default cache store.
+        'cache' => ['store' => env('ACTUATOR_METRICS_CACHE_STORE')],
+
+        'redis' => ['connection' => env('ACTUATOR_METRICS_REDIS_CONNECTION', 'default')],
+
+        // Tags added to every meter, e.g. ['application' => 'shop'].
+        'tags' => [],
+
+        // Turn meters off by name prefix, e.g. ['db.queries' => false,
+        // 'php' => false]. The longest prefix wins.
+        'enable' => [],
+
+        // Histogram buckets of timers and summaries, as upper bounds in
+        // the base unit (seconds for timers). Remove a meter, or give it
+        // an empty list, to keep only its count and sum.
+        'distribution' => [
+            'slo' => [
+                'http.server.requests' => [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
+                'db.queries' => [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 5],
+                'queue.jobs' => [0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30, 60, 300],
+                'tasks.scheduled.execution' => [0.1, 0.5, 1, 5, 10, 30, 60, 300, 900],
+            ],
+        ],
     ],
 
 ];
