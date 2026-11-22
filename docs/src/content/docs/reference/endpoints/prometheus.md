@@ -27,7 +27,8 @@ laravel-metrics itself, a second address for the same output.
 | Case                              | Status | Body                                              |
 | --------------------------------- | ------ | ------------------------------------------------- |
 | The store was read                | 200    | The metrics, in the text exposition format        |
-| The store cannot be read          | 503    | A line of text. The exception is reported.        |
+| `METRICS_ENABLED` is `false`      | 200    | Empty, even if the store holds older values       |
+| The store cannot be built or read | 503    | A line of text. The exception is reported.        |
 
 The content type is `text/plain; version=0.0.4; charset=utf-8`. The OpenMetrics format is not
 offered.

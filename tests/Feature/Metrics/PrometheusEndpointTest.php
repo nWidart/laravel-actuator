@@ -7,6 +7,7 @@ namespace Nwidart\Actuator\Tests\Feature\Metrics;
 use Illuminate\Support\Facades\Route;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Actuator\Tests\TestCase;
+use Nwidart\Metrics\Facades\Metrics;
 use Nwidart\MetricsStore\MetricStore;
 use OpenTelemetry\SDK\Resource\ResourceInfo;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
@@ -131,6 +132,48 @@ final class PrometheusEndpointTest extends TestCase
 
         $this->get('/home')->assertOk();
         $this->get('/actuator/prometheus')->assertStatus(503);
+    }
+
+    #[Test]
+    public function nothing_is_served_once_metrics_are_disabled(): void
+    {
+        $this->app->make(MeterRegistry::class)->counter('orders.placed')->increment(3);
+        $this->app->make(MeterRegistry::class)->gauge('queue.size', [], fn () => 4);
+        $this->app->make(MeterRegistry::class)->flush();
+        $this->app['config']->set('metrics.enabled', false);
+
+        $this->assertSame('', $this->scrape());
+    }
+
+    #[Test]
+    public function a_store_that_cannot_be_built_answers_503_and_the_application_keeps_working(): void
+    {
+        $this->app['config']->set('metrics.store.driver', 'unknown');
+        $this->app->forgetInstance(MetricStore::class);
+        Route::get('home', fn () => 'ok');
+
+        $this->get('/home')->assertOk();
+        $this->get('/actuator/prometheus')->assertStatus(503);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withOrdersTurnedOff')]
+    public function a_meter_turned_off_by_prefix_no_longer_serves_its_stored_series(): void
+    {
+        // Recorded before the deploy that turned "orders" off.
+        Metrics::meter(MeterRegistry::SCOPE)->createCounter('orders.placed')->add(3);
+        Metrics::meter('app')->createCounter('orders.placed')->add(2);
+        Metrics::flush();
+
+        $metrics = $this->scrape();
+
+        $this->assertStringNotContainsString('orders_placed_total{otel_scope_name="nwidart/laravel-actuator"}', $metrics);
+        $this->assertStringContainsString('orders_placed_total{otel_scope_name="app"} 2', $metrics);
+    }
+
+    protected function withOrdersTurnedOff($app): void
+    {
+        $app['config']->set('actuator.metrics.enable', ['orders' => false]);
     }
 
     #[Test]

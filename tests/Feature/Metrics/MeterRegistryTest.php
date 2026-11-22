@@ -167,6 +167,31 @@ final class MeterRegistryTest extends TestCase
     }
 
     #[Test]
+    public function the_same_name_with_another_unit_is_another_metric(): void
+    {
+        $this->registry()->summary('payload.size', unit: 'bytes')->record(1024);
+        $this->registry()->summary('payload.size', unit: 'items')->record(3);
+        $this->registry()->gauge('payload.limit', unit: 'bytes')->set(2048);
+        $this->registry()->gauge('payload.limit', unit: 'items')->set(10);
+
+        $output = (new PrometheusTextFormat)->render($this->metrics->metrics());
+        $this->assertStringContainsString('payload_size_bytes_sum{otel_scope_name="nwidart/laravel-actuator"} 1024', $output);
+        $this->assertStringContainsString('payload_size_items_sum{otel_scope_name="nwidart/laravel-actuator"} 3', $output);
+        $this->assertStringContainsString('payload_limit_bytes{otel_scope_name="nwidart/laravel-actuator"} 2048', $output);
+        $this->assertStringContainsString('payload_limit_items{otel_scope_name="nwidart/laravel-actuator"} 10', $output);
+    }
+
+    #[Test]
+    public function a_callback_registered_again_replaces_the_first_whatever_the_order_of_the_tags(): void
+    {
+        $this->registry()->gauge('queue.size', ['queue' => 'default', 'host' => 'a'], fn () => 4);
+        $this->registry()->gauge('queue.size', ['host' => 'a', 'queue' => 'default'], fn () => null);
+
+        $output = (new PrometheusTextFormat)->render($this->app->make(ExportTimeMetrics::class)->collect(ResourceInfoFactory::emptyResource()));
+        $this->assertStringNotContainsString('queue_size', $output);
+    }
+
+    #[Test]
     public function a_description_is_attached_to_the_meter(): void
     {
         $this->registry()->describe('orders.placed', 'Orders placed.');
