@@ -6,12 +6,15 @@ namespace Nwidart\Actuator;
 
 use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Support\ServiceProvider;
+use Nwidart\Actuator\Endpoints\EndpointRegistry;
 
 final class ActuatorServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/actuator.php', 'actuator');
+
+        $this->app->singletonIf(EndpointRegistry::class);
     }
 
     public function boot(): void
@@ -22,7 +25,7 @@ final class ActuatorServiceProvider extends ServiceProvider
             ], 'actuator-config');
         }
 
-        $this->loadRoutesFrom(__DIR__.'/../routes/actuator.php');
+        $this->app->make(EndpointRegistry::class)->loadRoutes();
 
         // Actuator endpoints keep answering in maintenance mode, so the
         // readiness probe reports OUT_OF_SERVICE instead of an HTML 503.

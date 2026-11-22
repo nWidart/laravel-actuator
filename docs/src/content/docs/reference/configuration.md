@@ -30,6 +30,7 @@ Keys you do not publish keep their default values.
 | `env.show_values`                | visibility              | `'never'`                                |                                |
 | `mappings.middleware`            | list of strings         | `[]`                                     |                                |
 | `scheduledtasks.middleware`      | list of strings         | `[]`                                     |                                |
+| `{id}.middleware`                | list of strings         | `[]`                                     |                                |
 
 Keys read when routes are registered: `base_path`, `exposure.*` and every `middleware` key. After a
 change, rebuild the route cache if you use one. The other keys are read on each request.
@@ -73,8 +74,9 @@ Endpoints that get a route.
 | `include` | Endpoint IDs to expose, or `'*'` for all.                                |
 | `exclude` | Endpoint IDs never to expose, or `'*'` for all. Wins over `include`.     |
 
-Endpoint IDs: `health`, `info`, `env`, `mappings`, `scheduledtasks`. Unknown IDs are ignored. The
-discovery endpoint is always registered.
+Endpoint IDs: `health`, `info`, `env`, `mappings`, `scheduledtasks`, and the ID of each
+[custom endpoint](/laravel-actuator/reference/custom-endpoints/). `'*'` includes custom endpoints.
+Unknown IDs are ignored. The discovery endpoint is always registered.
 
 ## `health`
 
@@ -221,3 +223,17 @@ An indicator or contributor definition has one of two forms:
 
 The Laravel container builds the class on each request. It injects the dependencies it can resolve
 and takes the other parameters from the arguments array.
+
+## `{id}.middleware`
+
+Middleware of a [custom endpoint](/laravel-actuator/reference/custom-endpoints/), under a key named
+after its ID. The key is not in the published file. Add it when the endpoint needs its own
+middleware:
+
+```php
+'modules' => [
+    'middleware' => ['auth:sanctum'],
+],
+```
+
+Without the key, the endpoint has only the shared `middleware`.

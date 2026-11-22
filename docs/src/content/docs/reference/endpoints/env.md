@@ -13,7 +13,7 @@ Lists every configuration key and environment variable.
 | Exposure      | Not exposed by default                                |
 | Middleware    | `middleware`, then `env.middleware`                   |
 | Configuration | [`env`](/laravel-actuator/reference/configuration/#env) |
-| Controller    | `Nwidart\Actuator\Http\Controllers\EnvController`     |
+| Class         | `Nwidart\Actuator\Http\Controllers\EnvController`     |
 
 :::danger
 Even with masked values, the keys reveal the services and packages the application uses. With

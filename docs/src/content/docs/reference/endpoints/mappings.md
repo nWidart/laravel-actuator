@@ -12,7 +12,7 @@ Lists every route registered in the application, actuator routes included.
 | Route name    | `actuator.mappings`                                       |
 | Exposure      | Not exposed by default                                    |
 | Middleware    | `middleware`, then `mappings.middleware`                  |
-| Controller    | `Nwidart\Actuator\Http\Controllers\MappingsController`    |
+| Class         | `Nwidart\Actuator\Http\Controllers\MappingsController`    |
 
 :::note
 This format is specific to Laravel. Spring Boot groups mappings by dispatcher servlet, which has no
@@ -51,9 +51,9 @@ curl http://localhost/actuator/mappings
     },
     {
       "methods": ["GET", "HEAD"],
-      "uri": "actuator/health/{path?}",
+      "uri": "actuator/health",
       "name": "actuator.health",
-      "action": "Nwidart\\Actuator\\Http\\Controllers\\HealthController",
+      "action": "Nwidart\\Actuator\\Http\\Controllers\\HealthController@health",
       "middleware": [],
       "domain": null
     }

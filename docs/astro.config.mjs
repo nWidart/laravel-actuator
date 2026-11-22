@@ -43,6 +43,7 @@ export default defineConfig({
 								{ slug: 'guides/expose-endpoints' },
 								{ slug: 'guides/secure-endpoints' },
 								{ slug: 'guides/change-the-base-path' },
+								{ slug: 'guides/write-a-custom-endpoint' },
 							],
 						},
 						{
@@ -87,6 +88,7 @@ export default defineConfig({
 								{ slug: 'reference/endpoints/scheduledtasks' },
 							],
 						},
+						{ slug: 'reference/custom-endpoints' },
 						{ slug: 'reference/health-indicators' },
 						{ slug: 'reference/info-contributors' },
 						{ slug: 'reference/php-api' },

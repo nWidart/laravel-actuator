@@ -3,8 +3,9 @@ title: PHP API
 description: The public classes, interfaces and enums of Laravel Actuator.
 ---
 
-These are the types you implement or call from your application. The controllers and
-`Nwidart\Actuator\Health\HealthEndpoint` are implementation details and are not described here.
+These are the types you implement or call from your application. The controllers, the classes in
+`Nwidart\Actuator\Endpoints` other than the attributes, and `Nwidart\Actuator\Health\HealthEndpoint`
+are implementation details and are not described here.
 
 ## `HealthIndicator`
 
@@ -124,27 +125,53 @@ enum Visibility: string
 | `Visibility::fromConfig(mixed $value): Visibility` | Parses a configuration value. Throws `InvalidArgumentException` for anything else. |
 | `isGranted(): bool`                        | `Never`: `false`. `Always`: `true`. `WhenAuthorized`: the gate is defined and allows the current user. |
 
-## `Endpoint`
+## `Actuator`
 
 ```php
 namespace Nwidart\Actuator;
 
-enum Endpoint: string
+final class Actuator
 {
-    case Health = 'health';
-    case Info = 'info';
-    case Env = 'env';
-    case Mappings = 'mappings';
-    case ScheduledTasks = 'scheduledtasks';
+    /** @param class-string $class */
+    public static function endpoint(string $id, string $class): void;
 }
 ```
 
-| Method                          | Returns                                                   |
-| ------------------------------- | --------------------------------------------------------- |
-| `Endpoint::exposed(): array`    | The endpoints that `exposure` exposes.                    |
-| `controller(): string`          | The controller class of the endpoint.                     |
-| `middleware(): array`           | The shared middleware followed by the endpoint middleware. |
-| `Endpoint::sharedMiddleware(): array` | The shared `middleware`.                            |
+Registers a custom endpoint class under an ID. Call it in `register()` or `boot()` of a service
+provider. An invalid, reserved or duplicate ID throws `InvalidArgumentException`. A call after the
+application has booted throws `LogicException`. See
+[custom endpoints](/laravel-actuator/reference/custom-endpoints/).
+
+`Actuator` is also the class to test for when Laravel Actuator is an optional dependency:
+`class_exists(\Nwidart\Actuator\Actuator::class)`.
+
+## Operation attributes
+
+```php
+namespace Nwidart\Actuator\Endpoints\Attributes;
+
+#[Attribute(Attribute::TARGET_METHOD)]
+final class ReadOperation {}
+
+#[Attribute(Attribute::TARGET_METHOD)]
+final class WriteOperation {}
+
+#[Attribute(Attribute::TARGET_METHOD)]
+final class DeleteOperation {}
+
+#[Attribute(Attribute::TARGET_PARAMETER)]
+final class Selector
+{
+    public function __construct(public readonly bool $remaining = false) {}
+}
+```
+
+| Attribute            | Target    | Meaning                                                                   |
+| -------------------- | --------- | ------------------------------------------------------------------------- |
+| `ReadOperation`      | Method    | The method answers `GET`.                                                 |
+| `WriteOperation`     | Method    | The method answers `POST`.                                                |
+| `DeleteOperation`    | Method    | The method answers `DELETE`.                                              |
+| `Selector`           | Parameter | The parameter is a path segment. `remaining: true` matches the whole remaining path. |
 
 ## Built-in implementations
 
@@ -156,18 +183,20 @@ The built-in classes are `final`. To change one, write your own class that imple
 ## Service provider
 
 `Nwidart\Actuator\ActuatorServiceProvider` merges the configuration, publishes it under the
-`actuator-config` tag, loads the routes, and adds `base_path` to the maintenance mode exceptions.
+`actuator-config` tag, registers the routes, and adds `base_path` to the maintenance mode exceptions.
 
 ## Routes
 
 | Name                       | Path                         |
 | -------------------------- | ---------------------------- |
 | `actuator.discovery`       | `/{base_path}`               |
-| `actuator.health`          | `/{base_path}/health/{path?}` |
+| `actuator.health`          | `/{base_path}/health`        |
+| `actuator.health-path`     | `/{base_path}/health/{path}` |
 | `actuator.info`            | `/{base_path}/info`          |
 | `actuator.env`             | `/{base_path}/env`           |
 | `actuator.mappings`        | `/{base_path}/mappings`      |
 | `actuator.scheduledtasks`  | `/{base_path}/scheduledtasks` |
 
 Only exposed endpoints have a route. Use the names with `route()`, for example
-`route('actuator.health')`.
+`route('actuator.health')`. For the route names of a custom endpoint, see
+[custom endpoints](/laravel-actuator/reference/custom-endpoints/#route-names).

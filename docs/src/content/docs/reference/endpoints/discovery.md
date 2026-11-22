@@ -27,6 +27,11 @@ flag.
 | `env`            | `env` is exposed             | The env URL                             | `false`     |
 | `mappings`       | `mappings` is exposed        | The mappings URL                        | `false`     |
 | `scheduledtasks` | `scheduledtasks` is exposed  | The scheduled tasks URL                 | `false`     |
+| `{id}`           | A custom endpoint is exposed | The endpoint URL                        | `false`     |
+| `{id}-{selector}` | A custom endpoint with a selector is exposed | The endpoint URL followed by `/{selector}` | `true` |
+
+A [custom endpoint](/laravel-actuator/reference/custom-endpoints/#discovery-links) has one link for
+each of its paths. Built-in endpoints come first, then custom endpoints in registration order.
 
 The links use the host and scheme of the request, as Laravel's `route()` helper builds them.
 

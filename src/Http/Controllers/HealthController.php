@@ -5,17 +5,34 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
+use Nwidart\Actuator\Endpoints\Attributes\Selector;
 use Nwidart\Actuator\Health\HealthEndpoint;
 
 final class HealthController
 {
-    public function __invoke(HealthEndpoint $endpoint, ?string $path = null): JsonResponse
+    #[ReadOperation]
+    public function health(HealthEndpoint $endpoint): ?JsonResponse
     {
-        $segments = $path === null ? [] : array_values(array_filter(explode('/', $path), static fn (string $segment): bool => $segment !== ''));
+        return $this->respond($endpoint, []);
+    }
+
+    /**
+     * The health of a group, a component, or a component of a group.
+     */
+    #[ReadOperation]
+    public function healthForPath(HealthEndpoint $endpoint, #[Selector(remaining: true)] string $path): ?JsonResponse
+    {
+        return $this->respond($endpoint, array_values(array_filter(explode('/', $path), static fn (string $segment): bool => $segment !== '')));
+    }
+
+    /**
+     * @param  list<string>  $segments
+     */
+    private function respond(HealthEndpoint $endpoint, array $segments): ?JsonResponse
+    {
         $health = $endpoint->health($segments);
 
-        abort_if($health === null, 404);
-
-        return new JsonResponse($health, $health['status']->httpStatus());
+        return $health === null ? null : new JsonResponse($health, $health['status']->httpStatus());
     }
 }

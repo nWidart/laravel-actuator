@@ -5,19 +5,23 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Nwidart\Actuator\Endpoint;
+use Nwidart\Actuator\Endpoints\EndpointRegistry;
+use Nwidart\Actuator\Endpoints\Operation;
 
 final class DiscoveryController
 {
-    public function __invoke(): JsonResponse
+    public function __invoke(EndpointRegistry $registry): JsonResponse
     {
-        $links = ['self' => $this->link(route('actuator.discovery'))];
+        $self = route('actuator.discovery');
+        $links = ['self' => $this->link($self)];
 
-        foreach (Endpoint::exposed() as $endpoint) {
-            $links[$endpoint->value] = $this->link(route("actuator.{$endpoint->value}"));
-
-            if ($endpoint === Endpoint::Health) {
-                $links['health-path'] = $this->link(route('actuator.health').'/{*path}', templated: true);
+        foreach ($registry->exposed() as $id => $class) {
+            foreach (Operation::of($id, $class) as $operation) {
+                // Operations on the same path share one link.
+                $links[$operation->key()] ??= $this->link(
+                    rtrim($self, '/').'/'.$operation->path(template: true),
+                    templated: $operation->selectors !== [],
+                );
             }
         }
 

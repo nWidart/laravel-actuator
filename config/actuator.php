@@ -32,7 +32,9 @@ return [
     |
     | Middleware applied to every actuator route. Each endpoint below can
     | add its own middleware, e.g. to keep "health" public for probes
-    | while protecting "env" behind authentication.
+    | while protecting "env" behind authentication. A custom endpoint
+    | reads its middleware from a key named after its id:
+    | 'modules' => ['middleware' => ['auth']].
     |
     */
 
@@ -45,7 +47,8 @@ return [
     |
     | Endpoints reachable over HTTP. Use '*' to expose all of them. An
     | excluded endpoint is never exposed, even when it is included.
-    | Available: health, info, env, mappings, scheduledtasks.
+    | Available: health, info, env, mappings, scheduledtasks, and each
+    | custom endpoint registered with Actuator::endpoint().
     |
     */
 
