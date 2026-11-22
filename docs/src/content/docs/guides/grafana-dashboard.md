@@ -1,0 +1,110 @@
+---
+title: Use the sample Grafana dashboard
+description: Import a ready-made Grafana dashboard for the built-in metrics, then adapt it to your application.
+---
+
+Laravel Actuator comes with a sample [Grafana](https://grafana.com) dashboard for the
+[built-in metrics](/laravel-actuator/reference/metrics/). Import it as it is, or use it as a starting
+point for your own.
+
+![The sample dashboard, with requests, queries, jobs and cache operations of a demo application](../../../assets/grafana-dashboard.png)
+
+## Before you start
+
+You need:
+
+- a Prometheus server that scrapes the `prometheus` endpoint. See
+  [collect metrics with Prometheus](/laravel-actuator/guides/collect-metrics-with-prometheus/).
+- a Grafana server with that Prometheus server as a data source. The dashboard is tested with
+  Grafana 12.
+
+## Import the dashboard
+
+1. Download [`laravel-actuator.json`](/laravel-actuator/grafana/laravel-actuator.json).
+2. In Grafana, open **Dashboards**, then **New** > **Import**.
+3. Upload the file, or paste its content, and click **Load**, then **Import**.
+4. At the top of the dashboard, pick your Prometheus server in **Data source**.
+
+To provision the dashboard instead, copy `laravel-actuator.json` to a folder that a dashboard
+provider reads:
+
+```yaml title="provisioning/dashboards/laravel.yml"
+apiVersion: 1
+providers:
+  - name: laravel
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards/laravel
+```
+
+## What the dashboard shows
+
+| Row                    | Panels                                                                                      | Metrics                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Overview               | Request rate, share of 5xx responses, p95 request duration, exceptions, failed job attempts, cache hit ratio, versions | All                                                                |
+| HTTP requests          | Requests by route and by status class, duration percentiles, slowest routes, a table of every route | `http_server_request_duration_seconds`                             |
+| Database               | Queries by operation, p95 query duration by database, queries per request                   | `db_client_operation_duration_seconds`                             |
+| Queues                 | Jobs dispatched and processed by queue, failed attempts by job, p95 job duration, a table of every job | `messaging_process_duration_seconds`, `messaging_client_sent_messages_total` |
+| Cache                  | Hit ratio by store, operations by result                                                    | `laravel_cache_operations_total`                                   |
+| Scheduled tasks        | A table of runs, failures and average duration by task, average duration over time          | `laravel_scheduler_task_duration_seconds`                          |
+| Exceptions             | Exceptions per minute by class, the most reported classes                                   | `laravel_exceptions_total`                                         |
+| PHP runtime and server | PHP-FPM workers and saturation, OPcache memory, hit ratio and scripts, load average, disk usage | `php_fpm_*`, `php_opcache_*`, `system_*`                           |
+
+The tables and the overview cover the time range of the dashboard. The other panels show a rate over
+time.
+
+The **Job** variable lists the Prometheus jobs that serve these metrics. Pick one to look at one
+application, or keep **All** to add them up.
+
+## Read the panels
+
+- The percentiles are estimated from the histogram buckets: 5 ms to 10 s for requests and jobs,
+  1 ms to 10 s for queries. A p99 above 10 s shows as 10 s.
+- **Queries per request** divides every query by every request. Queries of queued jobs and commands
+  count too, so read it as a trend: a jump often means an N+1 query.
+- **Jobs dispatched and processed** counts each attempt as processed. A queue that shows more
+  dispatched than processed jobs for a while is growing.
+- The scheduled task duration is averaged over 10 minute windows, because most tasks run at most once
+  a minute.
+- The PHP runtime and server row shows the values of the process that answered the scrape. With
+  several servers behind one address, each sample comes from whichever server answered. The PHP-FPM
+  panels are empty when PHP does not run under PHP-FPM, and the OPcache panels when OPcache is off.
+
+## Adapt the dashboard
+
+The dashboard is a starting point. Edit it in Grafana, then export it as JSON to keep your changes in version control.
+
+### Add a panel for your own meters
+
+The meters you create with [`MeterRegistry`](/laravel-actuator/guides/record-custom-metrics/) have the
+`otel_scope_name="nwidart/laravel-actuator"` label. For the `orders.placed` counter and the
+`payment.charge` timer of that guide:
+
+```text
+# Orders per minute, by channel
+sum by (channel) (rate(orders_placed_total{job=~"$job"}[$__rate_interval])) * 60
+
+# Average payment duration, by provider
+sum by (provider) (rate(payment_charge_seconds_sum{job=~"$job"}[$__rate_interval]))
+  / sum by (provider) (rate(payment_charge_seconds_count{job=~"$job"}[$__rate_interval]))
+
+# 95th percentile of the payment duration (the timer needs buckets)
+histogram_quantile(0.95, sum by (le) (rate(payment_charge_seconds_bucket{job=~"$job"}[$__rate_interval])))
+```
+
+A percentile needs [histogram buckets](/laravel-actuator/guides/record-custom-metrics/#add-histogram-buckets).
+Without them, a timer keeps only its count and sum.
+
+### Filter by your own labels
+
+To tell environments or tenants apart, add a label to every sample with `prometheus.labels` in
+`config/metrics.php`, or to one metric with
+[`tagUsing()`](/laravel-actuator/guides/tag-built-in-metrics/). Then add a Grafana variable for it, for
+example `label_values(http_server_request_duration_seconds_count, environment)`, and add
+`environment=~"$environment"` to the queries.
+
+## Related
+
+- [Built-in metrics](/laravel-actuator/reference/metrics/)
+- [Collect metrics with Prometheus](/laravel-actuator/guides/collect-metrics-with-prometheus/)
+- [Record your own metrics](/laravel-actuator/guides/record-custom-metrics/)

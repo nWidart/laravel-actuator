@@ -66,6 +66,7 @@ export default defineConfig({
 								{ slug: 'guides/choose-a-metrics-store' },
 								{ slug: 'guides/record-custom-metrics' },
 								{ slug: 'guides/tag-built-in-metrics' },
+								{ slug: 'guides/grafana-dashboard' },
 							],
 						},
 						{

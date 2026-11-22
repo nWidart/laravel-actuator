@@ -280,6 +280,8 @@ These are read during the scrape and never stored: `laravel.info`, `php.opcache.
 
 With a shared store, every server returns the totals of the whole application: scrape one address, not each server. `php artisan actuator:metrics:clear` empties the store.
 
+A [sample Grafana dashboard](https://nwidart.github.io/laravel-actuator/guides/grafana-dashboard/) shows the built-in metrics: requests, queries, jobs, cache, scheduled tasks, exceptions and the PHP runtime. Import it, or use it as a starting point.
+
 ### Custom metrics
 
 Inject `MeterRegistry`. Its API is modelled on [Micrometer](https://micrometer.io): counters, gauges, timers and distribution summaries, with tags.

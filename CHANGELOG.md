@@ -2,6 +2,12 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- A sample Grafana dashboard for the built-in metrics, in `docs/public/grafana/laravel-actuator.json`. See the [guide](https://nwidart.github.io/laravel-actuator/guides/grafana-dashboard/).
+
 ## 1.2.0 - 2026-11-22
 
 ### Changed
