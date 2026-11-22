@@ -236,6 +236,49 @@ Lists every route with its methods, URI, name, action, middleware and domain.
 
 Lists the tasks of the Laravel scheduler in the Spring Boot format. Tasks that run every minute or less often are listed under `cron`, with their next execution time. Sub-minute tasks (`everyTenSeconds()` and similar) are listed under `fixedRate`, with an interval in milliseconds.
 
+## Custom endpoints
+
+Add your own endpoint from an application or a package. An endpoint is a class with methods marked as read (`GET`), write (`POST`) or delete (`DELETE`) operations. A `#[Selector]` parameter is a path segment:
+
+```php
+use Nwidart\Actuator\Endpoints\Attributes\DeleteOperation;
+use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
+use Nwidart\Actuator\Endpoints\Attributes\Selector;
+
+final class QueuesEndpoint
+{
+    #[ReadOperation]                                     // GET /actuator/queues
+    public function queues(): array { /* ... */ }
+
+    #[ReadOperation]                                     // GET /actuator/queues/{name}
+    public function queue(#[Selector] string $name): ?array { /* ... */ }
+
+    #[DeleteOperation]                                   // DELETE /actuator/queues/{name}
+    public function clear(#[Selector] string $name): void { /* ... */ }
+}
+```
+
+Register the class under an ID in the `register()` method of a service provider:
+
+```php
+use Nwidart\Actuator\Actuator;
+
+Actuator::endpoint('queues', QueuesEndpoint::class);
+```
+
+The endpoint then behaves like a built-in one:
+
+- It is not exposed by default. Add `queues` to `exposure.include`, or use `*`.
+- It is listed in the discovery response, with a templated `queues-name` link for the selector.
+- It receives the shared `middleware`, then `queues.middleware` when you add that key to the configuration.
+- Its routes work with `php artisan route:cache`.
+
+A read operation that returns `null` answers HTTP 404. A write or delete operation that returns nothing answers HTTP 204. Any other value is sent as JSON, and a response object is sent as it is. Parameters with a class type, such as `Illuminate\Http\Request`, are injected.
+
+Protect an endpoint with write or delete operations before you expose it.
+
+A package registers its endpoint the same way from its own service provider, guarded with `class_exists(Actuator::class)` when Laravel Actuator is optional. See [write a custom endpoint](https://nwidart.github.io/laravel-actuator/guides/write-a-custom-endpoint/).
+
 ## Testing
 
 ```bash

@@ -9,11 +9,11 @@ Reports the health of the application, a group, or one component.
 | ------------- | ----------------------------------------------------------- |
 | ID            | `health`                                                    |
 | Paths         | `GET /actuator/health`, `GET /actuator/health/{path}`       |
-| Route name    | `actuator.health`                                           |
+| Route names   | `actuator.health`, `actuator.health-path`                   |
 | Exposure      | Exposed by default                                          |
 | Middleware    | `middleware`, then `health.middleware`                      |
 | Configuration | [`health`](/laravel-actuator/reference/configuration/#health) |
-| Controller    | `Nwidart\Actuator\Http\Controllers\HealthController`        |
+| Class         | `Nwidart\Actuator\Http\Controllers\HealthController`        |
 
 ## Paths
 

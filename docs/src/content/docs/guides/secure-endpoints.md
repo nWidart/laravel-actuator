@@ -38,6 +38,11 @@ open for probes, put the protection on the other endpoints instead:
 An endpoint receives the shared middleware first, then its own. Each entry is a string: a
 middleware alias, a middleware group or a class name.
 
+A [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) is protected the same way,
+under a key named after its ID, for example `'modules' => ['middleware' => ['auth:sanctum']]`.
+Without that key, it has only the shared middleware. Protect an endpoint with write or delete
+operations before you expose it.
+
 :::note
 The actuator routes do not belong to the `web` group. Add `web` when you use session
 authentication, or `auth` cannot find the logged-in user.

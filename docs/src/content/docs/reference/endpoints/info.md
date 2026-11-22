@@ -13,7 +13,7 @@ Returns information about the running application.
 | Exposure      | Not exposed by default                                  |
 | Middleware    | `middleware`, then `info.middleware`                    |
 | Configuration | [`info`](/laravel-actuator/reference/configuration/#info) |
-| Controller    | `Nwidart\Actuator\Http\Controllers\InfoController`      |
+| Class         | `Nwidart\Actuator\Http\Controllers\InfoController`      |
 
 ## Response
 

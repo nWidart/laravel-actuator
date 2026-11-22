@@ -8,10 +8,12 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Http\JsonResponse;
 use InvalidArgumentException;
+use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
 use Nwidart\Actuator\Info\InfoContributor;
 
 final class InfoController
 {
+    #[ReadOperation]
     public function __invoke(Container $container, Repository $config): JsonResponse
     {
         $info = [];

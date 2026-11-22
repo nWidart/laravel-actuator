@@ -4,5 +4,4 @@ includes:
 parameters:
     level: max
     paths:
-        - routes
         - src

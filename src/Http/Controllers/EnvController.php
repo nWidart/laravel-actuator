@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Arr;
+use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
 use Nwidart\Actuator\Visibility;
 
 /**
@@ -17,6 +18,7 @@ final class EnvController
 {
     private const MASK = '******';
 
+    #[ReadOperation]
     public function __invoke(Application $app, Repository $config): JsonResponse
     {
         $showValues = Visibility::fromConfig($config->get('actuator.env.show_values', 'never'))->isGranted();

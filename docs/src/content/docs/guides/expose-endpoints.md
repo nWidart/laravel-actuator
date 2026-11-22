@@ -29,7 +29,9 @@ List the endpoint IDs in `exposure.include`:
 ],
 ```
 
-The IDs are `health`, `info`, `env`, `mappings` and `scheduledtasks`.
+The built-in IDs are `health`, `info`, `env`, `mappings` and `scheduledtasks`. A
+[custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) is exposed the same way, with
+the ID it was registered under. The `*` wildcard includes custom endpoints.
 
 ## Expose every endpoint
 

@@ -33,6 +33,6 @@ final class MappingsEndpointTest extends TestCase
             'middleware' => ['auth'],
             'domain' => 'shop.test',
         ], $routes['orders/{order}']);
-        $this->assertSame(HealthController::class, $routes['actuator/health/{path?}']['action']);
+        $this->assertSame(HealthController::class.'@healthForPath', $routes['actuator/health/{path}']['action']);
     }
 }

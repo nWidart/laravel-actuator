@@ -11,6 +11,7 @@ use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Date;
+use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
 
 /**
  * Scheduled tasks, in the Spring Boot "scheduledtasks" format.
@@ -18,6 +19,7 @@ use Illuminate\Support\Facades\Date;
  */
 final class ScheduledTasksController
 {
+    #[ReadOperation]
     public function __invoke(Application $app): JsonResponse
     {
         // Schedules defined in routes/console.php or withSchedule() only load with the console kernel.

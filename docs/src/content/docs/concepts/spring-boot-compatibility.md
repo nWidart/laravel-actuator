@@ -38,6 +38,12 @@ returns, so clients written for Spring Boot can parse them.
 **Exposure.** Only `health` is exposed by default, with `include` and `exclude` lists and the `*`
 wildcard.
 
+**Custom endpoints.** An endpoint has an ID and read, write and delete operations on `GET`, `POST`
+and `DELETE`. Selectors are path segments. A read operation without a result answers HTTP 404, and
+a write or delete operation without a result answers HTTP 204. The
+[custom endpoints reference](/laravel-actuator/reference/custom-endpoints/#differences-from-spring-boot)
+lists what is left out.
+
 ## What differs
 
 | Topic               | Spring Boot                                          | Laravel Actuator                                      |
@@ -50,7 +56,7 @@ wildcard.
 | `when_authorized`   | Spring Security roles                                | The `viewActuator` gate                               |
 | Liveness state      | An application state that the application can change | The `ping` indicator: alive while it can answer       |
 | Readiness state     | An application state that the application can change | Maintenance mode                                      |
-| Other endpoints     | `metrics`, `loggers`, `beans`, `threaddump` and more | Not available                                         |
+| Other endpoints     | `metrics`, `loggers`, `beans`, `threaddump` and more | Not built in. Write a [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) |
 | Separate port       | `management.server.port`                             | Same server as the application                        |
 | Configuration       | `management.*` properties                            | `config/actuator.php`                                 |
 
