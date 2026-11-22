@@ -5,8 +5,8 @@ description: Every metric that Laravel Actuator serves without code, with its ty
 
 The built-in metrics come from [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
 which Laravel Actuator requires. They use the names of the OpenTelemetry semantic conventions. The
-laravel-metrics README lists the attributes of each metric and what it leaves out. This page sums
-them up.
+[laravel-metrics documentation](https://nwidart.github.io/laravel-metrics/reference/metrics/http/)
+has a page per metric, with its attributes and what it leaves out. This page sums them up.
 
 The Switch column names the key of `config/metrics.php`, under `instrumentation`, that turns a
 group of metrics off, with its environment variable. `php artisan vendor:publish --tag=metrics-config`
@@ -88,7 +88,7 @@ describe that process and its server. Turn them off with `instrumentation.runtim
 
 `laravel.info` has the attributes `laravel.version`, `process.runtime.name`,
 `process.runtime.version` and `php.sapi`. The attributes of the others are in the
-[laravel-metrics README](https://github.com/nWidart/laravel-metrics#metrics-read-on-export).
+[laravel-metrics documentation](https://nwidart.github.io/laravel-metrics/reference/metrics/export-time/).
 
 The three database metrics run a query each during the scrape, and have their own switches:
 `instrumentation.db_server` (`METRICS_DB_SERVER`) for the connections, and
