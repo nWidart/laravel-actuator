@@ -11,8 +11,6 @@
 
 Production-ready endpoints to monitor your Laravel application: health checks for Kubernetes probes and load balancers, metrics for Prometheus, build and runtime info, configuration, routes and scheduled tasks.
 
-The endpoints follow [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html), so tools built for it, such as [Spring Boot Admin](https://github.com/codecentric/spring-boot-admin), can read them.
-
 **Documentation: [nwidart.github.io/laravel-actuator](https://nwidart.github.io/laravel-actuator/)**
 
 ## Requirements
