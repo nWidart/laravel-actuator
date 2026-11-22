@@ -5,56 +5,62 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Metrics;
 
 use Closure;
+use Nwidart\Metrics\AttributeContributors;
+use Nwidart\Metrics\Metrics;
+use OpenTelemetry\API\Metrics\CounterInterface;
+use OpenTelemetry\API\Metrics\GaugeInterface;
+use OpenTelemetry\API\Metrics\HistogramInterface;
+use OpenTelemetry\API\Metrics\MeterInterface;
+use OpenTelemetry\API\Metrics\MeterProviderInterface;
+use OpenTelemetry\API\Metrics\ObserverInterface;
 use Throwable;
 
 /**
- * Creates meters and reads them back. Modelled on Micrometer's MeterRegistry.
- *
- * Measurements are buffered in this process and written to the store once,
- * by flush(), at the end of the request, job or command.
+ * Creates meters, as Micrometer's MeterRegistry does, on top of nwidart/laravel-metrics: a
+ * counter is an OpenTelemetry counter, a timer is a histogram in seconds, a summary is a
+ * histogram in its own unit, and a gauge is a gauge. They are recorded in the request and merged
+ * into the shared store when it ends. A counter or a gauge with a callback is read only when the
+ * metrics are exported (a scrape), and is never stored.
  */
 final class MeterRegistry
 {
-    private readonly Buffer $buffer;
+    private const SCOPE = 'nwidart/laravel-actuator';
 
-    private ?MetricsStore $store = null;
+    /** Micrometer base units => OpenTelemetry (UCUM) units. */
+    private const UNITS = ['seconds' => 's', 'milliseconds' => 'ms', 'bytes' => 'By'];
 
-    private bool $failureReported = false;
+    private ?MeterInterface $meter = null;
 
-    /** @var array<string, string> */
-    private readonly array $commonTags;
+    /** @var array<string, CounterInterface> */
+    private array $counters = [];
 
-    /** @var array<string, list<float>> */
-    private readonly array $buckets;
+    /** @var array<string, GaugeInterface> */
+    private array $gauges = [];
 
-    /** @var array<string, Closure(): (int|float|null)> */
-    private array $callbacks = [];
-
-    /** @var array<string, list<Closure(object): mixed>> */
-    private array $contributors = [];
+    /** @var array<string, HistogramInterface> */
+    private array $histograms = [];
 
     /** @var array<string, string> */
     private array $descriptions = [];
 
-    /** @var list<Closure(self): void> */
-    private array $collecting = [];
+    /** @var array<string, array{type: 'counter'|'gauge', unit: ?string, series: array<string, array{tags: array<non-empty-string, string|int|float|bool>, value: Closure(): (int|float|null)}>}> */
+    private array $observed = [];
+
+    /** @var array<string, list<float>> */
+    private readonly array $buckets;
+
+    private bool $failureReported = false;
 
     /**
-     * @param  Closure(): MetricsStore  $resolveStore  called on the first write or read
-     * @param  bool  $active  false turns every meter into a no-op
-     * @param  array<string, string|int|float|bool>  $commonTags  added to every meter
      * @param  array<string, bool>  $enable  meter name prefix => enabled. The longest prefix wins.
      * @param  array<string, list<int|float>>  $buckets  timer or summary name => histogram upper bounds
      */
     public function __construct(
-        private readonly Closure $resolveStore,
-        private readonly bool $active = true,
-        array $commonTags = [],
+        private readonly Metrics $metrics,
+        private readonly AttributeContributors $contributors,
         private readonly array $enable = [],
         array $buckets = [],
     ) {
-        $this->buffer = new Buffer;
-        $this->commonTags = $this->normalize($commonTags);
         $this->buckets = array_map(static function (array $bounds): array {
             $bounds = array_map(floatval(...), $bounds);
             sort($bounds);
@@ -64,33 +70,47 @@ final class MeterRegistry
     }
 
     /**
-     * A value that only goes up. Pass a callback when another system already
-     * keeps the total: it is called when the meters are read.
+     * A value that only goes up. Pass a callback when another system already keeps the total: it
+     * is called when the metrics are exported, and increment() then does nothing.
      *
      * @param  array<string, string|int|float|bool>  $tags
      * @param  (Closure(): (int|float|null))|null  $value
      */
     public function counter(string $name, array $tags = [], ?Closure $value = null): Counter
     {
-        $id = $this->id(MeterType::Counter, $name, '', $tags);
-        $this->sample($id->series('total'), $name, $value);
+        $tags = self::tags($tags);
+        if (! $this->enabled($name)) {
+            return new Counter($name, null, $tags);
+        }
+        if ($value !== null) {
+            $this->observe('counter', $name, null, $tags, $value);
 
-        return new Counter($this->bufferFor($name), $id);
+            return new Counter($name, null, $tags);
+        }
+
+        return new Counter($name, $this->counters[$name] ??= $this->meter()->createCounter($name, null, $this->descriptions[$name] ?? null), $tags);
     }
 
     /**
-     * A value that goes up and down. Either pass a callback, which is called
-     * when the meters are read, or call set() on the gauge.
+     * A value that goes up and down. Either pass a callback, which is called when the metrics are
+     * exported, or call set() on the gauge.
      *
      * @param  array<string, string|int|float|bool>  $tags
      * @param  (Closure(): (int|float|null))|null  $value  null as a result leaves the gauge out
      */
     public function gauge(string $name, array $tags = [], ?Closure $value = null, string $unit = ''): Gauge
     {
-        $id = $this->id(MeterType::Gauge, $name, $unit, $tags);
-        $this->sample($id->series('value'), $name, $value);
+        $tags = self::tags($tags);
+        if (! $this->enabled($name)) {
+            return new Gauge(null, $tags);
+        }
+        if ($value !== null) {
+            $this->observe('gauge', $name, self::unit($unit), $tags, $value);
 
-        return new Gauge($this->bufferFor($name), $id);
+            return new Gauge(null, $tags);
+        }
+
+        return new Gauge($this->gauges[$name] ??= $this->meter()->createGauge($name, self::unit($unit), $this->descriptions[$name] ?? null), $tags);
     }
 
     /**
@@ -100,7 +120,7 @@ final class MeterRegistry
      */
     public function timer(string $name, array $tags = []): Timer
     {
-        return new Timer($this->bufferFor($name), $this->id(MeterType::Timer, $name, 'seconds', $tags), $this->buckets[$name] ?? []);
+        return new Timer($this->histogram($name, 's'), self::tags($tags));
     }
 
     /**
@@ -110,14 +130,13 @@ final class MeterRegistry
      */
     public function summary(string $name, array $tags = [], string $unit = ''): DistributionSummary
     {
-        return new DistributionSummary($this->bufferFor($name), $this->id(MeterType::Summary, $name, $unit, $tags), $this->buckets[$name] ?? []);
+        return new DistributionSummary($this->histogram($name, self::unit($unit)), self::tags($tags));
     }
 
     /**
-     * Adds tags to a meter that is recorded by someone else, such as the
-     * built-in "http.server.requests". The callback receives the object the
-     * measurement is about (see the documentation of each meter) and
-     * returns the tags to add. Keep the number of distinct values small.
+     * Adds tags to a meter that someone else records, such as the built-in
+     * "http.server.request.duration" of laravel-metrics. The callback receives what the
+     * measurement is about and returns the tags to add. Keep the number of distinct values small.
      *
      * @template TContext of object
      *
@@ -125,53 +144,23 @@ final class MeterRegistry
      */
     public function tagUsing(string $meter, Closure $callback): void
     {
-        /** @var Closure(object): mixed $callback */
-        $this->contributors[$meter][] = $callback;
+        $this->metrics->attributes($meter, $callback);
     }
 
     /**
-     * The tags contributed through tagUsing() for one measurement. Call
-     * this when you record a meter that others may want to tag.
+     * The tags contributed through tagUsing() for one measurement. Call this when you record a
+     * meter that others may want to tag. A contributor that throws is skipped.
      *
-     * A contributor is code from elsewhere, and it runs inside the request,
-     * job or query it describes. So nothing it does may fail that work: a
-     * contributor that throws is skipped, and so is a value that is not a
-     * string, a number or a boolean. What a contributor does is not measured.
-     *
-     * @return array<string, string|int|float|bool>
+     * @return array<non-empty-string, string|int|float|bool>
      */
     public function tagsFor(string $meter, object $context): array
     {
-        // A contributor can itself run a query or raise an exception. That work is
-        // not measured: measuring it would call the contributor again, without end.
-        if ($this->buffer->paused) {
-            return [];
-        }
-
-        $tags = [];
-
-        foreach ($this->contributors[$meter] ?? [] as $contributor) {
-            try {
-                $contributed = $this->withoutRecording(static fn (): mixed => $contributor($context));
-            } catch (Throwable $e) {
-                $this->reportOnce($e);
-
-                continue;
-            }
-
-            foreach (is_array($contributed) ? $contributed : [] as $tag => $value) {
-                if (is_scalar($value)) {
-                    $tags[(string) $tag] = $value;
-                }
-            }
-        }
-
-        return $tags;
+        return $this->contributors->for($meter, $context);
     }
 
     /**
-     * Sets the help text shown next to a meter. Call it from a service
-     * provider, so that the process that answers the scrape knows it.
+     * Sets the help text shown next to a meter. Call it from a service provider, before the meter
+     * is first used.
      */
     public function describe(string $name, string $description): void
     {
@@ -179,14 +168,10 @@ final class MeterRegistry
     }
 
     /**
-     * Whether the meter is recorded: metrics are active and no "enable" prefix turns it off.
+     * Whether the meter is recorded: no "enable" prefix turns it off.
      */
     public function enabled(string $name): bool
     {
-        if (! $this->active) {
-            return false;
-        }
-
         $match = null;
         $enabled = true;
 
@@ -203,213 +188,94 @@ final class MeterRegistry
     }
 
     /**
-     * Registers a callback that runs each time the meters are read, before
-     * the callbacks of gauges and counters. Use it for meters that are only
-     * worth building for a scrape.
-     *
-     * @internal
-     *
-     * @param  Closure(self): void  $callback
-     */
-    public function collecting(Closure $callback): void
-    {
-        $this->collecting[] = $callback;
-    }
-
-    /**
-     * Writes the buffered measurements to the store. A store failure is
-     * reported once per process and never thrown: metrics must not break
-     * the work they measure.
+     * Merges what was recorded into the store now. The request, the command and each queued job
+     * already do it when they end. A failure never reaches the caller.
      */
     public function flush(): void
     {
-        [$increments, $values] = $this->buffer->drain();
+        $this->metrics->flush();
+    }
 
-        if ($increments === [] && $values === []) {
-            return;
+    private function histogram(string $name, ?string $unit): ?HistogramInterface
+    {
+        if (! $this->enabled($name)) {
+            return null;
         }
 
-        try {
-            $this->withoutRecording(fn () => $this->store()->write($increments, $values));
-        } catch (Throwable $e) {
-            $this->reportOnce($e);
-        }
+        // No configured bounds: one bucket, so the histogram keeps only its count and sum.
+        return $this->histograms[$name] ??= $this->meter()->createHistogram($name, $unit, $this->descriptions[$name] ?? null, ['ExplicitBucketBoundaries' => $this->buckets[$name] ?? []]);
     }
 
     /**
-     * Reads every enabled meter: the stored ones and the callbacks.
-     *
-     * @return list<MeterSnapshot>
-     *
-     * @throws Throwable when the store cannot be read
+     * @param  'counter'|'gauge'  $type
+     * @param  array<non-empty-string, string|int|float|bool>  $tags
+     * @param  Closure(): (int|float|null)  $value
      */
-    public function collect(): array
+    private function observe(string $type, string $name, ?string $unit, array $tags, Closure $value): void
     {
-        if (! $this->active) {
-            return [];
+        $first = $this->observed === [];
+        $this->observed[$name] ??= ['type' => $type, 'unit' => $unit, 'series' => []];
+        // The same meter and tags registered again replace the callback, as they do in Micrometer.
+        $this->observed[$name]['series'][serialize($tags)] = ['tags' => $tags, 'value' => $value];
+
+        if ($first) {
+            $this->metrics->onExport(fn (MeterProviderInterface $provider) => $this->createObserved($provider));
         }
-
-        foreach ($this->collecting as $callback) {
-            try {
-                $callback($this);
-            } catch (Throwable $e) {
-                // The other meters are still worth a scrape.
-                $this->reportOnce($e);
-            }
-        }
-
-        $series = $this->withoutRecording(fn (): array => $this->store()->read());
-
-        foreach ($this->callbacks as $key => $callback) {
-            try {
-                $value = $callback();
-            } catch (Throwable $e) {
-                $this->reportOnce($e);
-
-                continue;
-            }
-
-            if ($value !== null) {
-                $series[$key] = (float) $value;
-            }
-        }
-
-        $ids = [];
-        $statistics = [];
-
-        foreach ($series as $key => $value) {
-            $parsed = MeterId::parse($key);
-
-            if ($parsed === null || ! $this->enabled($parsed[0]->name)) {
-                continue;
-            }
-
-            $meter = $parsed[0]->series('');
-            $ids[$meter] = $parsed[0];
-            $statistics[$meter][$parsed[1]] = $value;
-        }
-
-        ksort($ids);
-        $snapshots = [];
-
-        foreach ($ids as $meter => $id) {
-            $snapshots[] = $this->snapshot($id, $statistics[$meter] ?? []);
-        }
-
-        return $snapshots;
     }
 
-    /**
-     * Removes every stored series, and the measurements still buffered.
-     */
-    public function clear(): void
+    private function createObserved(MeterProviderInterface $provider): void
     {
-        $this->buffer->drain();
-        $this->withoutRecording(fn () => $this->store()->clear());
-    }
+        $meter = $provider->getMeter(self::SCOPE);
 
-    /**
-     * @param  array<string, float>  $statistics
-     */
-    private function snapshot(MeterId $id, array $statistics): MeterSnapshot
-    {
-        // The buckets are always the configured ones, so that every series of a
-        // histogram has the same bounds. A count stored under another bound, from
-        // before a configuration change, moves to the next configured bound.
-        $bounds = $this->buckets[$id->name] ?? [];
-        $counts = array_fill(0, count($bounds), 0.0);
+        foreach ($this->observed as $name => $observed) {
+            $callback = function (ObserverInterface $observer) use ($observed): void {
+                foreach ($observed['series'] as $series) {
+                    try {
+                        $value = ($series['value'])();
+                    } catch (Throwable $e) {
+                        $this->reportOnce($e);
 
-        foreach ($statistics as $statistic => $value) {
-            if (! str_starts_with($statistic, 'le:')) {
-                continue;
-            }
+                        continue;
+                    }
 
-            foreach ($bounds as $index => $bound) {
-                if ((float) substr($statistic, 3) <= $bound) {
-                    $counts[$index] += $value;
-
-                    break;
+                    if ((is_int($value) || is_float($value)) && is_finite($value)) {
+                        $observer->observe($value, $series['tags']);
+                    }
                 }
+            };
+
+            $description = $this->descriptions[$name] ?? null;
+            $observed['type'] === 'counter'
+                ? $meter->createObservableCounter($name, $observed['unit'], $description, [], $callback)
+                : $meter->createObservableGauge($name, $observed['unit'], $description, [], $callback);
+        }
+    }
+
+    private function meter(): MeterInterface
+    {
+        return $this->meter ??= $this->metrics->meter(self::SCOPE);
+    }
+
+    /**
+     * @param  array<string, string|int|float|bool>  $tags
+     * @return array<non-empty-string, string|int|float|bool>
+     */
+    private static function tags(array $tags): array
+    {
+        $attributes = [];
+        foreach ($tags as $name => $value) {
+            $name = (string) $name;
+            if ($name !== '') {
+                $attributes[$name] = $value;
             }
         }
 
-        $buckets = [];
-        $cumulative = 0.0;
-
-        foreach ($bounds as $index => $bound) {
-            $buckets[] = [$bound, $cumulative += $counts[$index]];
-        }
-
-        return new MeterSnapshot(
-            name: $id->name,
-            type: $id->type,
-            unit: $id->unit,
-            tags: $id->tags,
-            description: $this->descriptions[$id->name] ?? '',
-            value: $statistics['total'] ?? $statistics['value'] ?? 0.0,
-            count: $statistics['count'] ?? 0.0,
-            sum: $statistics['sum'] ?? 0.0,
-            buckets: $buckets,
-        );
+        return $attributes;
     }
 
-    /**
-     * @param  array<string, string|int|float|bool>  $tags
-     */
-    private function id(MeterType $type, string $name, string $unit, array $tags): MeterId
+    private static function unit(string $unit): ?string
     {
-        // A tag of the meter wins over a common tag of the same name.
-        $tags = $this->normalize($tags) + $this->commonTags;
-        ksort($tags);
-
-        return new MeterId($type, $name, $unit, $tags);
-    }
-
-    /**
-     * @param  array<string, string|int|float|bool>  $tags
-     * @return array<string, string>
-     */
-    private function normalize(array $tags): array
-    {
-        return array_map(static fn (string|int|float|bool $value): string => is_bool($value) ? ($value ? 'true' : 'false') : (string) $value, $tags);
-    }
-
-    /**
-     * @param  (Closure(): (int|float|null))|null  $value
-     */
-    private function sample(string $series, string $name, ?Closure $value): void
-    {
-        if ($value !== null && $this->enabled($name)) {
-            $this->callbacks[$series] = $value;
-        }
-    }
-
-    private function bufferFor(string $name): ?Buffer
-    {
-        return $this->enabled($name) ? $this->buffer : null;
-    }
-
-    private function store(): MetricsStore
-    {
-        return $this->store ??= ($this->resolveStore)();
-    }
-
-    /**
-     * @template TReturn
-     *
-     * @param  Closure(): TReturn  $callback
-     * @return TReturn
-     */
-    private function withoutRecording(Closure $callback): mixed
-    {
-        $paused = $this->buffer->paused;
-        $this->buffer->paused = true;
-
-        try {
-            return $callback();
-        } finally {
-            $this->buffer->paused = $paused;
-        }
+        return $unit === '' ? null : (self::UNITS[$unit] ?? $unit);
     }
 
     private function reportOnce(Throwable $e): void

@@ -33,7 +33,7 @@ The built-in IDs are `health`, `info`, `env`, `mappings`, `scheduledtasks` and `
 [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) is exposed the same way, with
 the ID it was registered under. The `*` wildcard includes custom endpoints.
 
-Exposing `prometheus` also starts the collection of metrics, see
+Exposing `prometheus` gives the metrics an address. It does not start or stop their recording, see
 [collect metrics with Prometheus](/laravel-actuator/guides/collect-metrics-with-prometheus/).
 
 ## Expose every endpoint

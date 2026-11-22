@@ -4,29 +4,23 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Http\Controllers;
 
-use Illuminate\Http\Response;
+use Illuminate\Contracts\Container\Container;
 use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
-use Nwidart\Actuator\Metrics\Export\PrometheusTextFormat;
-use Nwidart\Actuator\Metrics\MeterRegistry;
-use Throwable;
+use Nwidart\Metrics\Http\PrometheusController as MetricsPrometheusController;
+use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Every meter, in the Prometheus text exposition format.
+ * Every metric of nwidart/laravel-metrics, in the Prometheus text exposition format: what the
+ * shared store holds, and what is read during the scrape. A store that cannot be read answers 503.
  */
 final class PrometheusController
 {
     #[ReadOperation]
-    public function __invoke(MeterRegistry $registry, PrometheusTextFormat $format): Response
+    public function __invoke(Container $container): Response
     {
-        try {
-            $meters = $registry->collect();
-        } catch (Throwable $e) {
-            report($e);
+        $response = $container->call(MetricsPrometheusController::class);
+        assert($response instanceof Response);
 
-            // A failed scrape tells Prometheus the target is down. Partial numbers would not.
-            return new Response("# The metrics store is not available.\n", 503, ['Content-Type' => PrometheusTextFormat::CONTENT_TYPE]);
-        }
-
-        return new Response($format->render($meters), 200, ['Content-Type' => PrometheusTextFormat::CONTENT_TYPE]);
+        return $response;
     }
 }

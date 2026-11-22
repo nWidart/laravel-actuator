@@ -18,7 +18,7 @@ and as useful to an attacker:
 | `env` values     | Every secret: `APP_KEY`, database passwords, API keys.                   |
 | `mappings`       | Every route, including admin and internal routes, with their middleware.  |
 | `scheduledtasks` | Background jobs and when they run.                                       |
-| `prometheus`     | Route patterns, job and exception class names, traffic and error rates.  |
+| `prometheus`     | Route patterns, database and cache names, job and exception class names, versions, traffic and error rates. |
 
 ## Secure by default
 

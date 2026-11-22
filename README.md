@@ -15,6 +15,7 @@ The endpoints follow [Spring Boot Actuator](https://docs.spring.io/spring-boot/r
 
 - PHP 8.2 or later
 - Laravel 12 or 13
+- Redis for the metrics in production (see [Metrics](#metrics))
 
 ## Installation
 
@@ -239,7 +240,9 @@ Lists the tasks of the Laravel scheduler in the Spring Boot format. Tasks that r
 
 ## Metrics
 
-Expose the `prometheus` endpoint to collect metrics and let a [Prometheus](https://prometheus.io) server scrape them:
+Metrics are recorded by [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics), which this package requires and registers. It records HTTP requests, database queries, queued jobs, cache operations, scheduled tasks and exceptions with no code, under their [OpenTelemetry](https://opentelemetry.io/docs/specs/semconv/) names. Recording starts at once, into the `default` Redis connection. Without Redis, for development, set `METRICS_STORE=cache` to use a Laravel cache store. `METRICS_ENABLED=false` turns recording off.
+
+Expose the `prometheus` endpoint to let a [Prometheus](https://prometheus.io) server scrape them:
 
 ```php
 'exposure' => [
@@ -252,47 +255,34 @@ curl http://localhost/actuator/prometheus
 ```
 
 ```text
-# HELP http_server_requests_seconds Duration of HTTP server request handling.
-# TYPE http_server_requests_seconds histogram
-http_server_requests_seconds_bucket{exception="none",method="GET",outcome="SUCCESS",status="200",uri="/users/{user}",le="0.1"} 3
-http_server_requests_seconds_count{exception="none",method="GET",outcome="SUCCESS",status="200",uri="/users/{user}"} 3
-http_server_requests_seconds_sum{exception="none",method="GET",outcome="SUCCESS",status="200",uri="/users/{user}"} 0.0241
+# HELP http_server_request_duration_seconds Duration of HTTP server requests.
+# TYPE http_server_request_duration_seconds histogram
+http_server_request_duration_seconds_bucket{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https",le="0.1"} 3
+http_server_request_duration_seconds_sum{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 0.0241
+http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/users/{user}",otel_scope_name="nwidart/laravel-metrics",url_scheme="https"} 3
 ```
 
-Nothing is recorded while the endpoint is not exposed. The model follows [Micrometer](https://docs.spring.io/spring-boot/reference/actuator/metrics.html), the metrics library of Spring Boot: a meter registry, counters, gauges, timers and distribution summaries, with tags.
+Prometheus names follow the OpenTelemetry compatibility rules: dots become underscores, the unit is appended (`_seconds`, `_bytes`), and a counter ends in `_total`. Every sample has an `otel_scope_name` label. Requests to the actuator routes are not recorded.
 
-### Built-in meters
+### Built-in metrics
 
-| Meter                       | Prometheus name                     | Tags                                              |
-|-----------------------------|-------------------------------------|---------------------------------------------------|
-| `http.server.requests`      | `http_server_requests_seconds`      | `method`, `uri`, `status`, `outcome`, `exception` |
-| `queue.jobs`                | `queue_jobs_seconds`                | `connection`, `queue`, `job`, `outcome`           |
-| `db.queries`                | `db_queries_seconds`                | `connection`                                      |
-| `exceptions`                | `exceptions_total`                  | `exception`                                       |
-| `tasks.scheduled.execution` | `tasks_scheduled_execution_seconds` | `task`, `outcome`                                 |
+| Metric                            | Prometheus name                           |
+|-----------------------------------|-------------------------------------------|
+| `http.server.request.duration`    | `http_server_request_duration_seconds`    |
+| `db.client.operation.duration`    | `db_client_operation_duration_seconds`    |
+| `messaging.process.duration`      | `messaging_process_duration_seconds`      |
+| `messaging.client.sent.messages`  | `messaging_client_sent_messages_total`    |
+| `laravel.cache.operations`        | `laravel_cache_operations_total`          |
+| `laravel.scheduler.task.duration` | `laravel_scheduler_task_duration_seconds` |
+| `laravel.exceptions`              | `laravel_exceptions_total`                |
 
-`uri` is the route pattern (`/users/{user}`), never the raw path. There are also gauges for PHP, OPcache, PHP-FPM, the system load and the disk. Turn meters off by name prefix:
+These are read during the scrape and never stored: `laravel.info`, `php.opcache.*`, `php.fpm.*`, `system.cpu.load_average.1m` and `system.filesystem.usage`. The [laravel-metrics README](https://github.com/nWidart/laravel-metrics#built-in-instrumentation) lists the attributes of each metric. Turn groups off, change the store, ignore more routes and add labels to every sample in `config/metrics.php` (`php artisan vendor:publish --tag=metrics-config`).
 
-```php
-'metrics' => [
-    'enable' => ['db.queries' => false, 'php' => false],
-],
-```
-
-### Storage
-
-PHP processes share no memory, so the measurements are kept in a store that web workers, queue workers and the scheduler all write to. Each process writes once, at the end of the request, job or command.
-
-| Store             | Setup                              | Use it for                      |
-|-------------------|------------------------------------|---------------------------------|
-| `cache` (default) | None. Uses your default cache store. | Development, small applications |
-| `redis`           | `ACTUATOR_METRICS_STORE=redis`     | Production                      |
-
-You can also name your own class that implements `MetricsStore`. With a shared store, every server returns the totals of the whole application: scrape one address, not each server. `php artisan actuator:metrics:clear` empties the store.
+With a shared store, every server returns the totals of the whole application: scrape one address, not each server. `php artisan actuator:metrics:clear` empties the store.
 
 ### Custom metrics
 
-Inject `MeterRegistry`:
+Inject `MeterRegistry`. Its API is modelled on [Micrometer](https://micrometer.io): counters, gauges, timers and distribution summaries, with tags.
 
 ```php
 use Nwidart\Actuator\Metrics\MeterRegistry;
@@ -311,37 +301,53 @@ final class PlaceOrder
 ```
 
 ```text
-orders_placed_total{channel="web"} 1
-payment_charge_seconds_count{provider="stripe"} 1
-payment_charge_seconds_sum{provider="stripe"} 0.153
+orders_placed_total{channel="web",otel_scope_name="nwidart/laravel-actuator"} 1
+payment_charge_seconds_bucket{otel_scope_name="nwidart/laravel-actuator",provider="stripe",le="+Inf"} 1
+payment_charge_seconds_sum{otel_scope_name="nwidart/laravel-actuator",provider="stripe"} 0.153
+payment_charge_seconds_count{otel_scope_name="nwidart/laravel-actuator",provider="stripe"} 1
 ```
 
-A gauge takes a callback that is read during the scrape, or a value that you set:
+A timer or summary has only the `+Inf` bucket until you give it buckets in `metrics.distribution.slo`. Turn your meters off by name prefix with `metrics.enable`:
 
 ```php
-$metrics->gauge('queue.size', ['queue' => 'default'], fn () => Queue::size('default'));
+'metrics' => [
+    'enable' => ['orders' => false],
+    'distribution' => ['slo' => ['payment.charge' => [0.1, 0.25, 0.5, 1, 2.5, 5]]],
+],
+```
+
+A gauge takes a callback that is read during the scrape, or a value that you set. Register callbacks in the `boot()` method of a service provider:
+
+```php
+public function boot(MeterRegistry $metrics): void
+{
+    $metrics->gauge('queue.size', ['queue' => 'default'], fn () => Queue::size('default'));
+}
+```
+
+```php
 $metrics->gauge('backup.last.success', unit: 'seconds')->set(time());
 ```
 
-### Tags on the built-in meters
+In tests, `Nwidart\Metrics\Facades\Metrics::fake()` keeps what is recorded in memory and offers assertions such as `assertValue('orders.placed', 1, ['channel' => 'web'])`.
 
-An application or a package adds its own tag to a built-in meter with `tagUsing()`. The callback receives the Laravel event of the measurement:
+### Tags on the built-in metrics
+
+An application or a package adds its own tag to a built-in metric with `tagUsing()`, by its OpenTelemetry name. The callback receives what the measurement is about, such as the Laravel event:
 
 ```php
 use Illuminate\Foundation\Http\Events\RequestHandled;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 
-public function boot(): void
+public function boot(MeterRegistry $metrics): void
 {
-    $this->callAfterResolving(MeterRegistry::class, function (MeterRegistry $metrics): void {
-        $metrics->tagUsing('http.server.requests', fn (RequestHandled $event): array => [
-            'module' => Modules::ofRoute($event->request->route()) ?? 'none',
-        ]);
-    });
+    $metrics->tagUsing('http.server.request.duration', fn (RequestHandled $event): array => [
+        'module' => Modules::ofRoute($event->request->route()) ?? 'none',
+    ]);
 }
 ```
 
-Keep the set of tag values small and fixed: each value is a series of its own.
+`tagUsing()` is `Metrics::attributes()` of laravel-metrics. Keep the set of tag values small and fixed: each value is a series of its own.
 
 ## Custom endpoints
 

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Console;
 
 use Illuminate\Console\Command;
-use Nwidart\Actuator\Metrics\MeterRegistry;
+use Nwidart\MetricsStore\MetricStore;
 
 final class ClearMetricsCommand extends Command
 {
@@ -13,9 +13,9 @@ final class ClearMetricsCommand extends Command
 
     protected $description = 'Remove every stored metric, for example after routes or tags changed';
 
-    public function handle(MeterRegistry $registry): int
+    public function handle(MetricStore $store): int
     {
-        $registry->clear();
+        $store->clear();
 
         $this->components->info('The metrics store is empty.');
 

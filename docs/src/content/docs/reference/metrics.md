@@ -1,159 +1,95 @@
 ---
-title: Built-in meters
-description: Every meter that Laravel Actuator records, with its type, tags and Prometheus name.
+title: Built-in metrics
+description: Every metric that Laravel Actuator serves without code, with its type, Prometheus name and switch.
 ---
 
-The meters below exist without any code in your application. Turn one off with
-[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable).
+The built-in metrics come from [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
+which Laravel Actuator requires. They use the names of the OpenTelemetry semantic conventions. The
+laravel-metrics README lists the attributes of each metric and what it leaves out. This page sums
+them up.
 
-## Recorded meters
+Turn a group of metrics off in `config/metrics.php`, under `instrumentation`. Publish that file with
+`php artisan vendor:publish --tag=metrics-config`. The
+[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) key of
+`config/actuator.php` does not apply to these metrics.
+
+## Recorded metrics
 
 These are recorded when something happens, in every process: web workers, queue workers and
-commands. They are kept in the [metrics store](/laravel-actuator/guides/choose-a-metrics-store/).
+commands. They are kept in the store of laravel-metrics.
 
-| Meter                       | Type    | Prometheus name                      | Default buckets |
-| --------------------------- | ------- | ------------------------------------ | --------------- |
-| `http.server.requests`      | Timer   | `http_server_requests_seconds`       | 5 ms to 10 s    |
-| `queue.jobs`                | Timer   | `queue_jobs_seconds`                 | 10 ms to 5 min  |
-| `db.queries`                | Timer   | `db_queries_seconds`                 | 1 ms to 5 s     |
-| `tasks.scheduled.execution` | Timer   | `tasks_scheduled_execution_seconds`  | 100 ms to 15 min |
-| `exceptions`                | Counter | `exceptions_total`                   |                 |
+| Metric                            | Type      | Prometheus name                            | Switch                                     |
+| --------------------------------- | --------- | ------------------------------------------ | ------------------------------------------ |
+| `http.server.request.duration`    | Histogram | `http_server_request_duration_seconds`     | `instrumentation.http` (`METRICS_HTTP`)    |
+| `db.client.operation.duration`    | Histogram | `db_client_operation_duration_seconds`     | `instrumentation.db` (`METRICS_DB`)        |
+| `messaging.process.duration`      | Histogram | `messaging_process_duration_seconds`       | `instrumentation.queue` (`METRICS_QUEUE`)  |
+| `messaging.client.sent.messages`  | Counter   | `messaging_client_sent_messages_total`     | `instrumentation.queue` (`METRICS_QUEUE`)  |
+| `laravel.cache.operations`        | Counter   | `laravel_cache_operations_total`           | `instrumentation.cache` (`METRICS_CACHE`)  |
+| `laravel.scheduler.task.duration` | Histogram | `laravel_scheduler_task_duration_seconds`  | `instrumentation.scheduler` (`METRICS_SCHEDULER`) |
+| `laravel.exceptions`              | Counter   | `laravel_exceptions_total`                 | `instrumentation.exceptions` (`METRICS_EXCEPTIONS`) |
 
-### `http.server.requests`
+| Metric                            | Attributes                                                                   |
+| --------------------------------- | ---------------------------------------------------------------------------- |
+| `http.server.request.duration`    | `http.request.method`, `http.route`, `http.response.status_code`, `url.scheme`, `network.protocol.version`, `error.type` |
+| `db.client.operation.duration`    | `db.system.name`, `db.namespace`, `db.operation.name`, `server.address`, `server.port` |
+| `messaging.process.duration`      | `messaging.system`, `messaging.operation.name`, `messaging.destination.name`, `laravel.job.name`, `error.type` |
+| `messaging.client.sent.messages`  | `messaging.system`, `messaging.operation.name`, `messaging.destination.name`, `laravel.job.name` |
+| `laravel.cache.operations`        | `laravel.cache.store`, `laravel.cache.operation`, `laravel.cache.result`     |
+| `laravel.scheduler.task.duration` | `laravel.scheduler.task.name`, `error.type`                                  |
+| `laravel.exceptions`              | `exception.type`                                                             |
 
-One observation for each HTTP request, from the start of the request until the response is ready.
-The name and the tags are those of Spring Boot.
+`http.route` is the route template, such as `/users/{user}`, never the raw path. Requests to the
+actuator routes are not recorded: Laravel Actuator adds `actuator.*` to `metrics.ignore_routes`.
+Add your own patterns there, such as `/up` or `horizon.*`.
 
-| Tag         | Values                                                                                     |
-| ----------- | ------------------------------------------------------------------------------------------ |
-| `method`    | `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`, or `OTHER`                     |
-| `uri`       | The route pattern, such as `/users/{user}`. Without a route: `NOT_FOUND` for a 404, `REDIRECTION` for a 3xx, else `UNKNOWN`. |
-| `status`    | The HTTP status code                                                                       |
-| `outcome`   | `INFORMATIONAL`, `SUCCESS`, `REDIRECTION`, `CLIENT_ERROR`, `SERVER_ERROR` or `UNKNOWN`     |
-| `exception` | The class name of the exception that produced the response, without namespace, or `none`   |
+The histograms have buckets out of the box: 5 ms to 10 s for requests and jobs, 1 ms to 10 s for
+queries, and 100 ms to 15 min for scheduled tasks.
 
-The raw path is never a tag, so a path with an id in it does not create a series of its own.
-Requests to the actuator endpoints are not counted. The time to send a streamed response is not
-included. A request that PHP ends with a fatal error, such as a timeout or exhausted memory, is not
-counted.
+## Metrics read on export
 
-Tag contributors receive `Illuminate\Foundation\Http\Events\RequestHandled`.
+These are read during the scrape, in the process that answers it, and are never stored. They
+describe that process and its server. Turn them off with `instrumentation.runtime`
+(`METRICS_RUNTIME`).
 
-### `queue.jobs`
+| Metric                         | Prometheus name                       | Present when                          |
+| ------------------------------ | ------------------------------------- | ------------------------------------- |
+| `laravel.info`                 | `laravel_info`                        | Always. The value is 1.               |
+| `php.opcache.memory.usage`     | `php_opcache_memory_usage_bytes`      | OPcache runs                          |
+| `php.opcache.scripts`          | `php_opcache_scripts`                 | OPcache runs                          |
+| `php.opcache.lookups`          | `php_opcache_lookups_total`           | OPcache runs                          |
+| `php.fpm.processes`            | `php_fpm_processes`                   | PHP runs under PHP-FPM                |
+| `php.fpm.listen_queue`         | `php_fpm_listen_queue`                | PHP runs under PHP-FPM                |
+| `php.fpm.connections.accepted` | `php_fpm_connections_accepted_total`  | PHP runs under PHP-FPM                |
+| `php.fpm.max_children_reached` | `php_fpm_max_children_reached_total`  | PHP runs under PHP-FPM                |
+| `php.fpm.slow_requests`        | `php_fpm_slow_requests_total`         | PHP runs under PHP-FPM                |
+| `system.cpu.load_average.1m`   | `system_cpu_load_average_1m`          | Not on Windows                        |
+| `system.filesystem.usage`      | `system_filesystem_usage_bytes`       | The disk that holds the application   |
 
-One observation for each attempt to run a queued job.
+`laravel.info` has the attributes `laravel.version`, `process.runtime.name`,
+`process.runtime.version` and `php.sapi`. The attributes of the others are in the
+[laravel-metrics README](https://github.com/nWidart/laravel-metrics#metrics-read-on-export).
 
-| Tag          | Values                                                                 |
-| ------------ | ---------------------------------------------------------------------- |
-| `connection` | The queue connection, such as `redis`                                  |
-| `queue`      | The queue name                                                         |
-| `job`        | The job class, or its display name                                     |
-| `outcome`    | See below                                                              |
+There are no metrics for the process itself, such as CPU time or memory. Each scrape is answered by
+another short-lived process, so these values would not form a series.
 
-| `outcome`  | The attempt                                                              |
-| ---------- | ------------------------------------------------------------------------ |
-| `SUCCESS`  | Finished.                                                                |
-| `RELEASED` | Was released back to the queue without an exception, for example by a rate limiter. |
-| `RETRY`    | Threw, and the job will be attempted again.                              |
-| `FAILED`   | Threw or was marked as failed, and the job will not be attempted again.  |
+## Labels on every sample
 
-A job that throws twice and then succeeds counts two `RETRY` attempts and one `SUCCESS`. An attempt
-that the worker stops because it ran longer than its timeout counts as `RETRY` or `FAILED` too. A
-queue worker writes its measurements to the store after each job.
+Every sample has the `otel_scope_name` label. It is `nwidart/laravel-metrics` for the metrics on
+this page, and `nwidart/laravel-actuator` for the meters you create with `MeterRegistry`.
 
-The `queue` tag is only bounded when your queue names are. If you create queues at runtime, such as
-one for each tenant, replace the tag with a fixed value:
-`$metrics->tagUsing('queue.jobs', fn () => ['queue' => 'tenant'])`.
+Add your own labels to every sample with `prometheus.labels` in `config/metrics.php`:
 
-Tag contributors receive `Illuminate\Queue\Events\JobProcessed`,
-`Illuminate\Queue\Events\JobExceptionOccurred` when the job threw, or
-`Illuminate\Queue\Events\JobTimedOut` when the worker stopped the job.
+```php title="config/metrics.php"
+'prometheus' => [
+    // ...
+    'labels' => ['application' => 'shop'],
+],
+```
 
-### `db.queries`
+An attribute of the same name wins over a label from this list.
 
-One observation for each database query, with the duration that Laravel measures.
+## Related
 
-| Tag          | Values                                |
-| ------------ | ------------------------------------- |
-| `connection` | The database connection, such as `mysql` |
-
-The SQL is never a tag. Queries that the metrics store or a tag contributor runs are not counted.
-
-Tag contributors receive `Illuminate\Database\Events\QueryExecuted`.
-
-### `exceptions`
-
-Counts the exceptions that the application reports, which are the ones that reach your log.
-These are not counted:
-
-- exceptions that Laravel does not report, such as a 404 or a validation failure,
-- an exception class that has its own `report()` method,
-- an exception for which one of your `reportable()` callbacks returns `false`,
-- any exception, when your exception handler does not extend the one of Laravel.
-
-| Tag         | Values                                          |
-| ----------- | ----------------------------------------------- |
-| `exception` | The class name of the exception, without namespace |
-
-Tag contributors receive the `Throwable`.
-
-### `tasks.scheduled.execution`
-
-One observation for each run of a scheduled task. The name is that of Spring Boot.
-
-| Tag       | Values                                                                                     |
-| --------- | ------------------------------------------------------------------------------------------ |
-| `task`    | See below                                                                                  |
-| `outcome` | `SUCCESS`, or `FAILED` when the task threw or exited with a failure code                   |
-
-| Task                                              | `task`                                    |
-| ------------------------------------------------- | ----------------------------------------- |
-| Has a `description()`                             | The description                           |
-| Artisan command, for example `command('report:send --date=today')` | The command name: `report:send` |
-| Shell command, for example `exec('backup.sh --all')` | The program: `backup.sh`               |
-| Closure or job without a description              | Laravel's summary, for example `Callback` or the job class |
-
-The arguments of a command are never part of the tag: they can hold a secret, and they can change
-on each run. Two tasks that run the same command with other arguments therefore share a series.
-Give each a `description()` to tell them apart.
-
-Skipped tasks are not counted, including a `withoutOverlapping()` task whose previous run is still
-going. A task that runs in the background is timed until it has started, not until it has finished.
-
-Tag contributors receive `Illuminate\Console\Events\ScheduledTaskFinished`, or
-`Illuminate\Console\Events\ScheduledTaskFailed` when the task threw.
-
-## Meters read during the scrape
-
-These are read when the endpoint is requested, and are not stored. They describe the server that
-answers the scrape.
-
-| Meter                          | Type    | Prometheus name                    | Tags              | Present when          |
-| ------------------------------ | ------- | ---------------------------------- | ----------------- | --------------------- |
-| `php.info`                     | Gauge   | `php_info`                         | `version`, `sapi` | Always. The value is 1. |
-| `laravel.info`                 | Gauge   | `laravel_info`                     | `version`         | Always. The value is 1. |
-| `php.opcache.memory.used`      | Gauge   | `php_opcache_memory_used_bytes`    |                   | OPcache is enabled    |
-| `php.opcache.memory.free`      | Gauge   | `php_opcache_memory_free_bytes`    |                   | OPcache is enabled    |
-| `php.opcache.memory.wasted`    | Gauge   | `php_opcache_memory_wasted_bytes`  |                   | OPcache is enabled    |
-| `php.opcache.scripts.cached`   | Gauge   | `php_opcache_scripts_cached`       |                   | OPcache is enabled    |
-| `php.opcache.hits`             | Counter | `php_opcache_hits_total`           |                   | OPcache is enabled    |
-| `php.opcache.misses`           | Counter | `php_opcache_misses_total`         |                   | OPcache is enabled    |
-| `php.fpm.processes`            | Gauge   | `php_fpm_processes`                | `state`: `active` or `idle` | PHP runs under PHP-FPM |
-| `php.fpm.listen.queue`         | Gauge   | `php_fpm_listen_queue`             |                   | PHP runs under PHP-FPM |
-| `php.fpm.connections.accepted` | Counter | `php_fpm_connections_accepted_total` |                 | PHP runs under PHP-FPM |
-| `php.fpm.max.children.reached` | Counter | `php_fpm_max_children_reached_total` |                 | PHP runs under PHP-FPM |
-| `php.fpm.slow.requests`        | Counter | `php_fpm_slow_requests_total`      |                   | PHP runs under PHP-FPM |
-| `system.load.average.1m`       | Gauge   | `system_load_average_1m`           |                   | Not on Windows        |
-| `disk.free`                    | Gauge   | `disk_free_bytes`                  |                   | Always                |
-| `disk.total`                   | Gauge   | `disk_total_bytes`                 |                   | Always                |
-
-`disk.free` and `disk.total` measure the disk that holds the application. `system.load.average.1m`,
-`disk.free` and `disk.total` use the names of Spring Boot.
-
-There are no meters for the process itself, such as CPU time, uptime or memory. Each scrape is
-answered by another short-lived process, so these values would not form a series.
-
-## Common tags
-
-The tags of [`metrics.tags`](/laravel-actuator/reference/configuration/#metricstags) are added to
-every meter above, and to your own.
+- [Add tags to the built-in metrics](/laravel-actuator/guides/tag-built-in-metrics/)
+- [The `prometheus` endpoint](/laravel-actuator/reference/endpoints/prometheus/)
+- [The metrics model](/laravel-actuator/concepts/metrics-model/)
