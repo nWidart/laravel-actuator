@@ -1,0 +1,161 @@
+---
+// A preview image that opens a larger image in a modal dialog when clicked.
+import type { ImageMetadata } from 'astro';
+import { Image } from 'astro:assets';
+
+interface Props {
+	/** The image shown in the page. */
+	preview: ImageMetadata;
+	/** The image shown in the dialog. */
+	full: ImageMetadata;
+	alt: string;
+	/** Text of the button under the preview and accessible name of the dialog. */
+	label: string;
+}
+
+const { preview, full, alt, label } = Astro.props;
+const id = `lightbox-${Math.random().toString(36).slice(2, 10)}`;
+---
+
+<figure class="lightbox not-content">
+	<button type="button" class="lightbox-open" command="show-modal" commandfor={id}>
+		<Image src={preview} alt={alt} />
+		<span class="lightbox-label">{label}</span>
+	</button>
+	<dialog id={id} class="lightbox-dialog" closedby="any" aria-label={label}>
+		<div class="lightbox-bar">
+			<button type="button" class="lightbox-close" command="close" commandfor={id} autofocus>
+				Close
+			</button>
+		</div>
+		<Image src={full} alt={alt} loading="lazy" />
+	</dialog>
+</figure>
+
+<script>
+	// Invoker commands (command, commandfor) and closedby are recent. Where they are missing, open,
+	// close and light-dismiss the dialog from script. Esc closes a modal dialog everywhere.
+	const outside = (event: PointerEvent, dialog: HTMLDialogElement) => {
+		const r = dialog.getBoundingClientRect();
+		return event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom;
+	};
+
+	for (const dialog of document.querySelectorAll<HTMLDialogElement>('dialog.lightbox-dialog')) {
+		if (!('commandForElement' in HTMLButtonElement.prototype)) {
+			document
+				.querySelector(`[commandfor="${dialog.id}"][command="show-modal"]`)
+				?.addEventListener('click', () => dialog.showModal());
+			dialog.querySelector('.lightbox-close')?.addEventListener('click', () => dialog.close());
+		}
+		if (!('closedBy' in HTMLDialogElement.prototype)) {
+			// Require the press and the release outside, so a drag that ends on the backdrop does not close it.
+			let pressedOutside = false;
+			dialog.addEventListener('pointerdown', (e) => (pressedOutside = outside(e, dialog)));
+			dialog.addEventListener('pointerup', (e) => {
+				if (pressedOutside && outside(e, dialog)) dialog.close();
+			});
+		}
+	}
+</script>
+
+<style>
+	.lightbox {
+		margin-block: 1.5rem;
+	}
+
+	.lightbox-open {
+		display: block;
+		width: 100%;
+		padding: 0;
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		overflow: hidden;
+		background: none;
+		color: inherit;
+		font: inherit;
+		cursor: zoom-in;
+	}
+
+	.lightbox-open:focus-visible {
+		outline: 2px solid var(--sl-color-accent);
+		outline-offset: 2px;
+	}
+
+	.lightbox-open img {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	.lightbox-label {
+		display: block;
+		padding: 0.5rem 0.75rem;
+		border-top: 1px solid var(--sl-color-gray-5);
+		font-size: var(--sl-text-sm);
+		color: var(--sl-color-gray-2);
+		text-align: center;
+	}
+
+	.lightbox-open:hover .lightbox-label {
+		color: var(--sl-color-white);
+	}
+
+	.lightbox-dialog {
+		/* Starlight resets the margins that center a modal dialog. */
+		margin: auto;
+		width: min(1600px, 100vw - 2rem);
+		max-width: none;
+		max-height: calc(100dvh - 2rem);
+		padding: 0;
+		border: 1px solid var(--sl-color-gray-5);
+		border-radius: 0.5rem;
+		background: #111217;
+		overflow: auto;
+	}
+
+	.lightbox-dialog:modal {
+		overscroll-behavior: contain;
+	}
+
+	.lightbox-dialog::backdrop {
+		background: rgb(0 0 0 / 0.75);
+		overflow: hidden;
+		overscroll-behavior: contain;
+	}
+
+	.lightbox-dialog img {
+		display: block;
+		width: 100%;
+		height: auto;
+	}
+
+	/* Zero height, so the close button floats over the top of the image and stays while scrolling. */
+	.lightbox-bar {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		height: 0;
+		display: flex;
+		justify-content: flex-end;
+		align-items: flex-start;
+	}
+
+	.lightbox-close {
+		margin: 0.75rem;
+		padding: 0.375rem 0.875rem;
+		border: 1px solid #5c5f6a;
+		border-radius: 0.375rem;
+		/* The dialog shows a dark Grafana screenshot in both themes. */
+		background: rgb(17 18 23 / 0.9);
+		color: #f6f7f9;
+		font: inherit;
+		font-size: var(--sl-text-sm);
+		line-height: 1.5;
+		cursor: pointer;
+	}
+
+	.lightbox-close:focus-visible {
+		outline: 2px solid var(--sl-color-accent);
+		outline-offset: 2px;
+	}
+</style>
