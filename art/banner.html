@@ -1,0 +1,84 @@
+<!doctype html>
+<!--
+  Source of banner.png. Render from this directory:
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+    --force-device-scale-factor=2 --virtual-time-budget=8000 --window-size=1280,400 \
+    --screenshot="$PWD/banner.png" "file://$PWD/banner.html"
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700;800&family=JetBrains+Mono:wght@400;600&display=block">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 400px; background: #0c0d10; overflow: hidden; }
+  body { font-family: 'Inter', sans-serif; color: #f4f4f5; position: relative; }
+  .grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    background-size: 40px 40px;
+    mask-image: radial-gradient(ellipse at 30% 50%, #000 30%, transparent 80%);
+  }
+  .glow {
+    position: absolute; width: 700px; height: 700px; left: -220px; top: -300px;
+    background: radial-gradient(circle, rgba(229,72,77,.22), transparent 65%);
+  }
+  .pulse { position: absolute; left: 0; right: 0; bottom: 34px; opacity: .55; }
+  .wrap { position: relative; display: flex; align-items: center; gap: 56px; height: 100%; padding: 0 72px; }
+  .left { flex: 1; }
+  .brand { display: flex; align-items: center; gap: 22px; }
+  .brand svg { width: 76px; height: 76px; filter: drop-shadow(0 8px 24px rgba(229,72,77,.45)); }
+  h1 { font-size: 58px; font-weight: 800; letter-spacing: -1.8px; line-height: 1; }
+  h1 span { color: #e5484d; }
+  p.tag { margin-top: 22px; font-size: 22px; color: #a1a1aa; line-height: 1.45; max-width: 560px; }
+  .chips { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .chips span {
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; color: #d4d4d8;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid #2a2b31; background: #15161a;
+  }
+  .term {
+    width: 470px; border-radius: 14px; background: #121317; border: 1px solid #26272d;
+    box-shadow: 0 24px 60px rgba(0,0,0,.5); overflow: hidden;
+    font-family: 'JetBrains Mono', monospace; font-size: 15px; line-height: 1.75;
+  }
+  .bar { display: flex; gap: 7px; padding: 13px 16px; border-bottom: 1px solid #22232a; }
+  .bar i { width: 11px; height: 11px; border-radius: 50%; background: #2e2f36; }
+  .code { padding: 18px 22px 22px; color: #d4d4d8; white-space: pre; }
+  .p { color: #e5484d; } .d { color: #71717a; } .k { color: #93c5fd; } .s { color: #fcd34d; }
+  .up { color: #4ade80; font-weight: 600; }
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="glow"></div>
+  <svg class="pulse" viewBox="0 0 1280 60" preserveAspectRatio="none" height="60" width="1280">
+    <path d="M0 40 H520 l14-26 22 44 14-18 H1280" fill="none" stroke="#e5484d" stroke-width="1.5" stroke-opacity=".5"/>
+  </svg>
+  <div class="wrap">
+    <div class="left">
+      <div class="brand">
+        <svg viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="7" fill="#e5484d"/><path d="M5 17h5l3-8 6 15 3-7h5" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <h1>Laravel <span>Actuator</span></h1>
+      </div>
+      <p class="tag">Production-ready monitoring endpoints for Laravel.</p>
+      <div class="chips">
+        <span>health</span><span>info</span><span>env</span><span>mappings</span><span>scheduledtasks</span><span>prometheus</span>
+      </div>
+    </div>
+    <div class="term">
+      <div class="bar"><i></i><i></i><i></i></div>
+<div class="code"><span class="p">$</span> curl /actuator/health/readiness
+<span class="d">HTTP/1.1 200 OK</span>
+{
+  <span class="k">"status"</span>: <span class="up">"UP"</span>,
+  <span class="k">"components"</span>: {
+    <span class="k">"db"</span>: { <span class="k">"status"</span>: <span class="up">"UP"</span> },
+    <span class="k">"readinessState"</span>: { <span class="k">"status"</span>: <span class="up">"UP"</span> }
+  }
+}</div>
+    </div>
+  </div>
+</body>
+</html>

@@ -8,3 +8,4 @@
 /phpstan.neon.dist  export-ignore
 /phpunit.xml.dist   export-ignore
 /docs               export-ignore
+/art                export-ignore
