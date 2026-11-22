@@ -10,7 +10,8 @@ load balancers, dashboards, alerting. A contract is only useful if both sides ag
 
 Spring Boot Actuator is the most widely deployed contract of this kind. Kubernetes examples, Helm
 charts, Spring Boot Admin and many internal platforms already assume its paths and its JSON. A team
-that runs Java and PHP services side by side can point the same probes and dashboards at both.
+that runs Spring Boot and Laravel services side by side can point the same probes and dashboards
+at both.
 
 Laravel Actuator therefore does not invent a format. Where Spring Boot has an answer, the package
 reuses it, and an operator who knows one knows the other.
@@ -62,7 +63,7 @@ lists what is left out.
 | Readiness state     | An application state that the application can change | Maintenance mode                                      |
 | Metric names and tags | Micrometer names, such as `http.server.requests` with `uri` and `outcome` | OpenTelemetry names, such as `http.server.request.duration` with `http.route`, from [laravel-metrics](https://github.com/nWidart/laravel-metrics#readme) |
 | Prometheus names    | Micrometer naming, such as `http_server_requests_seconds` | OpenTelemetry naming, such as `http_server_request_duration_seconds`, with an `otel_scope_name` label |
-| Metrics storage     | The memory of the one JVM process                    | A store shared by the PHP processes: Redis, or a cache store |
+| Metrics storage     | The memory of the one application process            | A store shared by the PHP processes: Redis, or a cache store |
 | Metrics backends    | Many monitoring systems, and the JSON `metrics` endpoint | The `prometheus` endpoint, or OTLP with laravel-metrics |
 | Runtime meters      | JVM memory, threads, garbage collection              | OPcache and PHP-FPM                                   |
 | Other endpoints     | `metrics`, `loggers`, `beans`, `threaddump` and more | Not built in. Write a [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) |
