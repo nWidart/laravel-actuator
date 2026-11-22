@@ -1,0 +1,94 @@
+---
+title: Show health details to authorized users
+description: Keep the public health response minimal while operators see every component and its details.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+By default the health endpoint shows only the overall status. Two settings reveal more:
+
+- `show_components` lists each component with its status.
+- `show_details` adds each component's details, such as the database driver or the free disk space.
+  When `show_components` is `null`, it follows `show_details`.
+
+Both accept `never`, `always` or `when_authorized`.
+
+## Show details to authorized users only
+
+<Steps>
+
+1. Set `show_details` to `when_authorized`. You can use the environment variable:
+
+   ```ini title=".env"
+   ACTUATOR_HEALTH_SHOW_DETAILS=when_authorized
+   ```
+
+2. Define the `viewActuator` gate in `AppServiceProvider::boot()`:
+
+   ```php title="app/Providers/AppServiceProvider.php"
+   use App\Models\User;
+   use Illuminate\Support\Facades\Gate;
+
+   Gate::define('viewActuator', fn (User $user) => $user->is_admin);
+   ```
+
+3. Add middleware that authenticates the user, without requiring authentication. Probes still get
+   the minimal response:
+
+   ```php title="config/actuator.php"
+   'health' => [
+       'middleware' => ['web'],
+       'show_details' => env('ACTUATOR_HEALTH_SHOW_DETAILS', 'never'),
+       // ...
+   ],
+   ```
+
+   With `web`, a logged-in administrator who opens `/actuator/health` in the browser sees the details.
+   An anonymous request sees only the status. For token clients, use a guard that reads the token,
+   such as `auth:sanctum`, but note that it then rejects anonymous probes.
+
+</Steps>
+
+:::caution[Sessions for every probe]
+The `web` group starts a session for every request, probes included. With the `file` or `database`
+session driver, each probe stores a session until garbage collection removes it. If that matters, use
+the `cookie` or `redis` session driver, or keep `show_details` at `never` on the public route.
+:::
+
+:::note
+The gate checks the authenticated user. Without middleware that lets the guard find the user
+(`web` for sessions, `auth:sanctum` for tokens), the user is `null`, and `when_authorized` never
+grants access.
+:::
+
+## Show components but not details
+
+List the components and their statuses for everyone, but keep the details for authorized users:
+
+```php title="config/actuator.php"
+'show_details' => 'when_authorized',
+'show_components' => 'always',
+```
+
+```json
+{
+  "status": "UP",
+  "components": {
+    "ping": { "status": "UP" },
+    "db": { "status": "UP" }
+  },
+  "groups": ["liveness", "readiness"]
+}
+```
+
+## Show everything outside production
+
+```php title="config/actuator.php"
+'show_details' => env('APP_ENV') === 'production' ? 'when_authorized' : 'always',
+```
+
+## See also
+
+- [Visibility values](/laravel-actuator/reference/configuration/#visibility-values)
+- [Secure the endpoints](/laravel-actuator/guides/secure-endpoints/)
+- [Security model](/laravel-actuator/concepts/security-model/)

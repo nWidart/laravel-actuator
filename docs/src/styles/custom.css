@@ -1,0 +1,12 @@
+/* Accent colours: a red close to Laravel's brand, tuned for contrast in both themes. */
+:root {
+	--sl-color-accent-low: #3b1214;
+	--sl-color-accent: #e5484d;
+	--sl-color-accent-high: #ffd1d3;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #ffe1e2;
+	--sl-color-accent: #c62a2f;
+	--sl-color-accent-high: #5c0f12;
+}

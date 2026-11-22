@@ -1,0 +1,66 @@
+---
+title: Introduction
+description: What Laravel Actuator is, what it gives your application, and how this documentation is organised.
+---
+
+import { LinkCard, CardGrid } from '@astrojs/starlight/components';
+
+Laravel Actuator adds production-ready monitoring endpoints to a Laravel application. It answers
+the questions that operators, orchestrators and monitoring tools ask a running service:
+
+- **Is it alive?** Can the process still serve requests?
+- **Is it ready?** Should it receive traffic right now?
+- **Are its dependencies healthy?** Database, cache, Redis, disk space.
+- **What is running?** Which build, which commit, which PHP and Laravel version?
+- **How is it configured?** Which configuration, routes and scheduled tasks does it have?
+
+The package is a port of [Spring Boot Actuator](https://docs.spring.io/spring-boot/reference/actuator/endpoints.html).
+It uses the same paths and the same status semantics. The `health`, `info`, `env` and
+`scheduledtasks` endpoints also return the same JSON. Tools built for Spring Boot, such as
+[Spring Boot Admin](https://github.com/codecentric/spring-boot-admin), can read them.
+
+## The endpoints
+
+| Endpoint                                                              | Path                       | Answers                                    | Exposed by default |
+| --------------------------------------------------------------------- | -------------------------- | ------------------------------------------ | ------------------ |
+| [Discovery](/laravel-actuator/reference/endpoints/discovery/)         | `/actuator`                | Which endpoints exist?                     | Yes                |
+| [`health`](/laravel-actuator/reference/endpoints/health/)             | `/actuator/health`         | Is the application healthy?                | Yes                |
+| [`info`](/laravel-actuator/reference/endpoints/info/)                 | `/actuator/info`           | What is running?                           | No                 |
+| [`env`](/laravel-actuator/reference/endpoints/env/)                   | `/actuator/env`            | How is it configured?                      | No                 |
+| [`mappings`](/laravel-actuator/reference/endpoints/mappings/)         | `/actuator/mappings`       | Which routes does it serve?                | No                 |
+| [`scheduledtasks`](/laravel-actuator/reference/endpoints/scheduledtasks/) | `/actuator/scheduledtasks` | What does the scheduler run, and when? | No                 |
+
+Only `health` is exposed by default, and it shows only an overall status. Everything else is opt-in.
+The [security model](/laravel-actuator/concepts/security-model/) explains why.
+
+## Requirements
+
+- PHP 8.2 or later
+- Laravel 12 or 13
+
+## How this documentation is organised
+
+The documentation has four parts. Each part serves a different need.
+
+<CardGrid>
+	<LinkCard
+		title="Tutorial"
+		description="Learning. Start here if you are new: one guided lesson from install to a custom health check."
+		href="/laravel-actuator/tutorial/"
+	/>
+	<LinkCard
+		title="How-to guides"
+		description="Working. Short recipes for one goal each, such as securing endpoints or configuring probes."
+		href="/laravel-actuator/guides/expose-endpoints/"
+	/>
+	<LinkCard
+		title="Reference"
+		description="Looking up. Every configuration key, endpoint response, built-in indicator and PHP class."
+		href="/laravel-actuator/reference/configuration/"
+	/>
+	<LinkCard
+		title="Concepts"
+		description="Understanding. The design behind health aggregation, probes, security and Spring Boot compatibility."
+		href="/laravel-actuator/concepts/spring-boot-compatibility/"
+	/>
+</CardGrid>

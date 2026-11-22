@@ -1,0 +1,71 @@
+---
+title: Laravel Actuator
+description: Production-ready monitoring endpoints for Laravel, modelled on Spring Boot Actuator.
+template: splash
+hero:
+  tagline: Health checks for Kubernetes probes and load balancers, plus build, runtime, configuration, route and scheduler insight. Same paths and JSON as Spring Boot Actuator.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Get started
+      link: /laravel-actuator/tutorial/
+      icon: right-arrow
+    - text: Read the introduction
+      link: /laravel-actuator/introduction/
+      variant: minimal
+    - text: View on GitHub
+      link: https://github.com/nWidart/laravel-actuator
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+```bash
+composer require nwidart/laravel-actuator
+curl http://localhost/actuator/health
+# {"status":"UP","groups":["liveness","readiness"]}
+```
+
+<CardGrid stagger>
+	<Card title="Health that orchestrators understand" icon="approve-check">
+		Status aggregation, HTTP 503 for `DOWN` and `OUT_OF_SERVICE`, and ready-made `liveness` and
+		`readiness` groups for Kubernetes probes.
+	</Card>
+	<Card title="Built-in indicators" icon="puzzle">
+		Database, cache, Redis, disk space and maintenance mode. Write your own in one class.
+	</Card>
+	<Card title="Spring Boot Actuator format" icon="random">
+		`health`, `info`, `env` and `scheduledtasks` use the Spring Boot JSON, so tools such as Spring
+		Boot Admin can read them.
+	</Card>
+	<Card title="Safe by default" icon="warning">
+		Only `health` is exposed, and it hides its details. Add middleware and a gate before you open
+		anything else.
+	</Card>
+</CardGrid>
+
+## Find your way
+
+<CardGrid>
+	<LinkCard
+		title="Tutorial"
+		description="Install the package and build your first custom health check, step by step."
+		href="/laravel-actuator/tutorial/"
+	/>
+	<LinkCard
+		title="How-to guides"
+		description="Recipes for real tasks: secure endpoints, configure probes, add build info."
+		href="/laravel-actuator/guides/secure-endpoints/"
+	/>
+	<LinkCard
+		title="Reference"
+		description="Every configuration key, endpoint response, indicator and PHP class."
+		href="/laravel-actuator/reference/configuration/"
+	/>
+	<LinkCard
+		title="Concepts"
+		description="Why the health model works the way it does, and how to think about probes."
+		href="/laravel-actuator/concepts/health-model/"
+	/>
+</CardGrid>

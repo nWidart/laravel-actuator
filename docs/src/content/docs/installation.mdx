@@ -1,0 +1,78 @@
+---
+title: Installation
+description: Install Laravel Actuator with Composer and publish its configuration file.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+## Requirements
+
+- PHP 8.2 or later
+- Laravel 12 or 13
+- For the optional Redis indicator: the `phpredis` extension or the `predis/predis` package
+
+## Install the package
+
+<Steps>
+
+1. Require the package with Composer:
+
+   ```bash
+   composer require nwidart/laravel-actuator
+   ```
+
+   Laravel package discovery registers `Nwidart\Actuator\ActuatorServiceProvider`. You do not need
+   to add it to `bootstrap/providers.php`.
+
+2. Check that the health endpoint answers:
+
+   ```bash
+   curl -i http://localhost/actuator/health
+   ```
+
+   ```http
+   HTTP/1.1 200 OK
+   Content-Type: application/json
+
+   {"status":"UP","groups":["liveness","readiness"]}
+   ```
+
+3. Optional: publish the configuration file to change the defaults:
+
+   ```bash
+   php artisan vendor:publish --tag=actuator-config
+   ```
+
+   This copies the file to `config/actuator.php`. The
+   [configuration reference](/laravel-actuator/reference/configuration/) describes every key.
+
+</Steps>
+
+:::note[Package discovery disabled?]
+If your application sets `dont-discover` for this package, register the provider yourself in
+`bootstrap/providers.php`:
+
+```php
+return [
+    App\Providers\AppServiceProvider::class,
+    Nwidart\Actuator\ActuatorServiceProvider::class,
+];
+```
+:::
+
+## Route and configuration caching
+
+The package reads `exposure`, `base_path` and every `middleware` key when it registers its
+routes. If you run `php artisan route:cache` or `php artisan optimize`, rebuild the caches after
+you change one of these keys:
+
+```bash
+php artisan optimize:clear
+php artisan optimize
+```
+
+## Next steps
+
+- New to the package? Follow the [tutorial](/laravel-actuator/tutorial/).
+- Deploying to Kubernetes? See [configure Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/).
+- Exposing more than `health`? Read [secure the endpoints](/laravel-actuator/guides/secure-endpoints/) first.
