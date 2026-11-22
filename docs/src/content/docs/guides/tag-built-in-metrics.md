@@ -27,7 +27,7 @@ public function boot(MeterRegistry $metrics): void
 ```
 
 ```text
-http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/{tenant}/dashboard",otel_scope_name="nwidart/laravel-metrics",tenant="pro",url_scheme="https"} 4
+http_server_request_duration_seconds_count{http_request_method="GET",http_response_status_code="200",http_route="/{tenant}/dashboard",network_protocol_version="1.1",otel_scope_name="nwidart/laravel-metrics",tenant="pro",url_scheme="https"} 4
 ```
 
 Register the callback in `boot()`, on every request. `callAfterResolving(MeterRegistry::class, ...)`

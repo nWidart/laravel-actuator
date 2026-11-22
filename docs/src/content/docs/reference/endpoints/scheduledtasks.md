@@ -12,6 +12,7 @@ Lists the tasks registered in the Laravel scheduler.
 | Route name    | `actuator.scheduledtasks`                                      |
 | Exposure      | Not exposed by default                                         |
 | Middleware    | `middleware`, then `scheduledtasks.middleware`                 |
+| Configuration | [`scheduledtasks`](/laravel-actuator/reference/configuration/#mappings-and-scheduledtasks) |
 | Class         | `Nwidart\Actuator\Http\Controllers\ScheduledTasksController`   |
 
 The endpoint loads the console kernel first, so it sees tasks defined in `routes/console.php` and in

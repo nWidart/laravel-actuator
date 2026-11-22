@@ -12,6 +12,7 @@ Lists every route registered in the application, actuator routes included.
 | Route name    | `actuator.mappings`                                       |
 | Exposure      | Not exposed by default                                    |
 | Middleware    | `middleware`, then `mappings.middleware`                  |
+| Configuration | [`mappings`](/laravel-actuator/reference/configuration/#mappings-and-scheduledtasks) |
 | Class         | `Nwidart\Actuator\Http\Controllers\MappingsController`    |
 
 :::note

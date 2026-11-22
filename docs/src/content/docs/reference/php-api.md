@@ -179,15 +179,21 @@ final class Selector
 namespace Nwidart\Actuator\Metrics;
 
 final class MeterRegistry
+{
+    public const SCOPE = 'nwidart/laravel-actuator';
+}
 ```
 
 Creates meters, with an API modelled on Micrometer. Each meter is an OpenTelemetry instrument of
 [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme), with the instrumentation
-scope `nwidart/laravel-actuator`. It is a container singleton: inject it, or resolve it with
+scope `MeterRegistry::SCOPE`. It is a container singleton: inject it, or resolve it with
 `app(MeterRegistry::class)`. See
 [record your own metrics](/laravel-actuator/guides/record-custom-metrics/).
 
 Tags are an `array<string, string|int|float|bool>`. A tag with an empty name is dropped.
+
+The registry keeps a meter by its name and its unit: the same name with another unit is another
+metric.
 
 | Method                                                                        | Description                                                        |
 | ----------------------------------------------------------------------------- | ------------------------------------------------------------------ |
@@ -204,8 +210,9 @@ Tags are an `array<string, string|int|float|bool>`. A tag with an empty name is 
 `$unit` is `seconds`, `milliseconds` or `bytes`, which become the OpenTelemetry units `s`, `ms` and
 `By`. Another unit is passed on as it is. An empty unit is no unit.
 
-A callback that throws is skipped during the scrape, and its exception is reported once. With
-`METRICS_ENABLED=false`, every meter records nothing.
+A callback registered again for the same meter and the same tags, in any order, replaces the
+first. A callback that throws is skipped during the scrape, and its exception is reported once.
+With `METRICS_ENABLED=false`, every meter records nothing.
 
 ## Meters
 
@@ -234,7 +241,10 @@ The built-in classes are `final`. To change one, write your own class that imple
 `actuator-config` tag, registers the routes, and adds `base_path` to the maintenance mode exceptions.
 It registers `Nwidart\Metrics\MetricsServiceProvider` of laravel-metrics, also when package
 discovery is off, and adds `actuator.*` to `metrics.ignore_routes`. It binds `MeterRegistry` as a
-singleton.
+singleton, and builds it when the application boots, in every process. When
+[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) is not empty, it
+registers a `Metrics::exclude()` filter that leaves the meters turned off out of every export. It
+registers the `actuator:metrics:clear` command.
 
 ## Artisan commands
 
