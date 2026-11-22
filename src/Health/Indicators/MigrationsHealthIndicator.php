@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Health\Indicators;
 
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Migrations\Migrator;
 use Nwidart\Actuator\Health\Health;
 use Nwidart\Actuator\Health\HealthIndicator;
@@ -35,18 +36,26 @@ final readonly class MigrationsHealthIndicator implements HealthIndicator
             return Health::unknown()->withException($exception);
         }
 
-        // What migrate runs: Laravel's own filter leaves out the migrations that have run and those
-        // of withoutMigrations(). shouldSkip() reads shouldRun(), since Laravel 12.x.
-        /** @var list<string> $paths */
-        $paths = (fn (): array => $this->pendingMigrations($files, $ran))->call($migrator);
-        $pending = [];
-        foreach ($paths as $path) {
-            // @phpstan-ignore function.alreadyNarrowedType (Laravel 12.0 has no shouldSkip())
-            if (! method_exists($migrator, 'shouldSkip') || ! $migrator->shouldSkip($path)) {
-                $pending[] = $migrator->getMigrationName($path);
-            }
-        }
+        $pending = array_map($migrator->getMigrationName(...), self::pending($migrator, $files, $ran));
 
         return $pending === [] ? Health::up() : Health::outOfService(['pending' => $pending]);
+    }
+
+    /**
+     * What migrate runs, with Laravel's own filter: without the migrations that have run, those of
+     * withoutMigrations(), and those whose shouldRun() returns false (Laravel 12.x and later).
+     *
+     * @param  array<string, string>  $files  name => path
+     * @param  array<string>  $ran
+     * @return list<string> paths
+     */
+    private static function pending(Migrator $migrator, array $files, array $ran): array
+    {
+        return (fn (): array => array_values(array_filter(
+            $this->pendingMigrations($files, $ran),
+            fn (string $path): bool => ! (($migration = $this->resolvePath($path)) instanceof Migration
+                // @phpstan-ignore function.alreadyNarrowedType (Laravel 12.0 has no shouldRun())
+                && method_exists($migration, 'shouldRun') && ! $migration->shouldRun()),
+        )))->call($migrator);
     }
 }
