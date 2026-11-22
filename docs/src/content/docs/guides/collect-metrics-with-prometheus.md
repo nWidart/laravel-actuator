@@ -155,3 +155,6 @@ sum(rate(http_server_request_duration_seconds_count{error_type!=""}[5m]))
 sum by (laravel_job_name) (rate(messaging_process_duration_seconds_sum[5m]))
   / sum by (laravel_job_name) (rate(messaging_process_duration_seconds_count[5m]))
 ```
+
+For a ready-made dashboard with these queries and more, see
+[use the sample Grafana dashboard](/laravel-actuator/guides/grafana-dashboard/).
