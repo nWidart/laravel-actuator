@@ -102,6 +102,20 @@ final class HealthEndpointTest extends TestCase
     }
 
     #[Test]
+    public function it_reports_an_indicator_that_cannot_be_resolved_as_down(): void
+    {
+        config()->set('actuator.health.show_details', 'always');
+        config()->set('actuator.health.indicators.broken', 'App\\Health\\DoesNotExist');
+
+        $this->getJson('/actuator/health')
+            ->assertStatus(503)
+            ->assertJsonPath('components.broken', ['status' => 'DOWN', 'details' => [
+                'error' => 'Illuminate\\Contracts\\Container\\BindingResolutionException: Target class [App\\Health\\DoesNotExist] does not exist.',
+            ]])
+            ->assertJsonPath('components.ping.status', 'UP');
+    }
+
+    #[Test]
     public function it_reports_unknown_without_indicators(): void
     {
         config()->set('actuator.health.indicators', []);

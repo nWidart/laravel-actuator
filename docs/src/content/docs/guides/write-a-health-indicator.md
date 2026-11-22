@@ -80,6 +80,9 @@ exception class and message in the `error` detail, and the package logs a warnin
 { "status": "DOWN", "details": { "error": "RuntimeException: Connection refused" } }
 ```
 
+The same happens when the container cannot build the indicator, for example when the class does
+not exist or a constructor dependency cannot be resolved. The other components still report.
+
 To report a failure with your own details, catch the exception and use `withException()`:
 
 ```php

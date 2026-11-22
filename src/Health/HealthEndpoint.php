@@ -98,18 +98,7 @@ final readonly class HealthEndpoint
      */
     private function evaluate(string $name, string|array $definition, bool $showDetails): array
     {
-        $indicator = $this->container->make(...(array) $definition);
-
-        if (! $indicator instanceof HealthIndicator) {
-            throw new InvalidArgumentException("Health indicator [{$name}] must implement ".HealthIndicator::class.'.');
-        }
-
-        try {
-            $health = $indicator->health();
-        } catch (Throwable $exception) {
-            Log::warning("Health indicator [{$name}] failed: {$exception->getMessage()}", ['exception' => $exception]);
-            $health = Health::down()->withException($exception);
-        }
+        $health = $this->check($name, $definition);
 
         $result = ['status' => $health->status];
 
@@ -118,5 +107,34 @@ final readonly class HealthEndpoint
         }
 
         return $result;
+    }
+
+    /**
+     * Resolve and run the indicator. A class that cannot be resolved, or an indicator that throws,
+     * reports DOWN with the exception, so one broken indicator does not fail the whole endpoint.
+     *
+     * @param  string|array{0: class-string, 1?: array<string, mixed>}  $definition
+     */
+    private function check(string $name, string|array $definition): Health
+    {
+        try {
+            $indicator = $this->container->make(...(array) $definition);
+        } catch (Throwable $exception) {
+            Log::warning("Health indicator [{$name}] could not be resolved: {$exception->getMessage()}", ['exception' => $exception]);
+
+            return Health::down()->withException($exception);
+        }
+
+        if (! $indicator instanceof HealthIndicator) {
+            throw new InvalidArgumentException("Health indicator [{$name}] must implement ".HealthIndicator::class.'.');
+        }
+
+        try {
+            return $indicator->health();
+        } catch (Throwable $exception) {
+            Log::warning("Health indicator [{$name}] failed: {$exception->getMessage()}", ['exception' => $exception]);
+
+            return Health::down()->withException($exception);
+        }
     }
 }
