@@ -2,7 +2,7 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
-## Unreleased
+## 1.0.0 - 2026-11-22
 
 First release, rebuilt for Laravel 12 and 13 (PHP 8.2+).
 
