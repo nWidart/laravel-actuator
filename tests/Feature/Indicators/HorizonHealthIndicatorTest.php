@@ -43,7 +43,15 @@ final class HorizonHealthIndicatorTest extends TestCase
     #[Test]
     public function without_horizon_it_is_unknown(): void
     {
-        $health = $this->app->make(HorizonHealthIndicator::class, ['repository' => 'Laravel\\Horizon\\Contracts\\MissingRepository'])->health();
+        $indicator = new class extends HorizonHealthIndicator
+        {
+            protected function installed(): bool
+            {
+                return false;
+            }
+        };
+
+        $health = $indicator->health();
 
         $this->assertSame(Status::Unknown, $health->status);
         $this->assertSame(['error' => 'laravel/horizon is not installed'], $health->details);

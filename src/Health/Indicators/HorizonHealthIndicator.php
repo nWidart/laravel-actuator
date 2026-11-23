@@ -14,21 +14,15 @@ use Nwidart\Actuator\Health\HealthIndicator;
  * when none runs (inactive), WARNING when one is paused, UP when they run. UNKNOWN when
  * laravel/horizon is not installed.
  */
-final readonly class HorizonHealthIndicator implements HealthIndicator
+class HorizonHealthIndicator implements HealthIndicator
 {
-    /**
-     * @param  string  $repository  the Horizon interface that lists the master supervisors. Tests change it to stand for a missing Horizon.
-     */
-    public function __construct(private string $repository = MasterSupervisorRepository::class) {}
-
     public function health(): Health
     {
-        if (! interface_exists($this->repository)) {
+        if (! $this->installed()) {
             return Health::unknown(['error' => 'laravel/horizon is not installed']);
         }
 
-        /** @var MasterSupervisorRepository $repository */
-        $repository = Container::getInstance()->make($this->repository);
+        $repository = Container::getInstance()->make(MasterSupervisorRepository::class);
         $masters = $repository->all();
 
         $paused = array_filter($masters, static fn (mixed $master): bool => is_object($master) && ($master->status ?? null) === 'paused');
@@ -38,5 +32,15 @@ final readonly class HorizonHealthIndicator implements HealthIndicator
             $paused !== [] => Health::warning(['status' => 'paused', 'masters' => count($masters)]),
             default => Health::up(['status' => 'running', 'masters' => count($masters)]),
         };
+    }
+
+    /**
+     * Whether laravel/horizon is installed. A test overrides it to stand for a missing Horizon.
+     *
+     * @internal
+     */
+    protected function installed(): bool
+    {
+        return interface_exists(MasterSupervisorRepository::class);
     }
 }
