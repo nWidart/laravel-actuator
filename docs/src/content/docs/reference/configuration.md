@@ -311,8 +311,9 @@ The middleware added after the shared `middleware` on the
 
 These keys apply only to the meters you create with
 [`MeterRegistry`](/laravel-actuator/reference/php-api/#meterregistry), and to
-[`laravel.health.indicator.duration`](/laravel-actuator/reference/metrics/#recorded-by-laravel-actuator),
-which Laravel Actuator records through it. The other built-in metrics are
+[`laravel.health.indicator.duration`](/laravel-actuator/reference/metrics/#recorded-by-laravel-actuator)
+and the [health status gauges](/laravel-actuator/reference/metrics/#health-status), which Laravel
+Actuator records through it. The other built-in metrics are
 switched in `instrumentation` of `config/metrics.php`. See the
 [built-in metrics](/laravel-actuator/reference/metrics/).
 

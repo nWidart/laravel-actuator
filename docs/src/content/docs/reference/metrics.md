@@ -79,6 +79,54 @@ It is recorded through `MeterRegistry`, so the keys of `config/actuator.php` app
 [`metrics.distribution.slo`](/laravel-actuator/reference/configuration/#metricsdistributionslo)
 sets its buckets. Without buckets, it keeps only its count and sum.
 
+## Health status
+
+| Metric                          | Type  | Prometheus name                 | Attributes            |
+| ------------------------------- | ----- | ------------------------------- | --------------------- |
+| `laravel.health.status`         | Gauge | `laravel_health_status`         | `component`, `status` |
+| `laravel.health.overall.status` | Gauge | `laravel_health_overall_status` | `status`              |
+
+The health status, so that you can alert on health from the metrics you already scrape.
+`laravel.health.status` has a series for each configured health indicator, named in `component`,
+and each status: `DOWN`, `OUT_OF_SERVICE`, `WARNING`, `UP` and `UNKNOWN`. A series is 1 for the
+current status and 0 for the others, so no series disappears when a status changes.
+`laravel.health.overall.status` has the same series for the status of the whole application, the
+status of `/actuator/health`.
+
+```text
+laravel_health_status{component="db",otel_scope_name="nwidart/laravel-actuator",status="DOWN"} 0
+laravel_health_status{component="db",otel_scope_name="nwidart/laravel-actuator",status="UP"} 1
+laravel_health_overall_status{otel_scope_name="nwidart/laravel-actuator",status="UP"} 1
+```
+
+The application status has its own gauge, rather than a reserved `component` value, so that a sum
+or a count over `laravel_health_status` covers only indicators, and so that you can turn the
+component series off and keep the application status.
+
+The gauges are read during the scrape and are never stored. Every indicator is in them, whatever
+`show_details` and `show_components` say: protect the `prometheus` endpoint instead. An indicator
+that throws or cannot be resolved is `DOWN`, and the scrape still succeeds.
+
+Each scrape runs every indicator once, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+holds its result. Turn the cache on, so that scrapes and probes share one run.
+
+Both are on by default. [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable)
+turns them off with `'laravel.health' => false`, or only the component series with
+`'laravel.health.status' => false`.
+
+A Prometheus alert when an indicator is down for 2 minutes:
+
+```yaml title="alerts.yml"
+groups:
+  - name: laravel
+    rules:
+      - alert: HealthIndicatorDown
+        expr: laravel_health_status{status="DOWN"} == 1
+        for: 2m
+        annotations:
+          summary: "{{ $labels.component }} is DOWN on {{ $labels.instance }}"
+```
+
 ## Metrics read on export
 
 These are read during the scrape, in the process that answers it, and are never stored. They
@@ -118,7 +166,7 @@ another short-lived process, so these values would not form a series.
 ## Labels on every sample
 
 Every sample has the `otel_scope_name` label. It is `nwidart/laravel-metrics` for the metrics on
-this page, and `nwidart/laravel-actuator` for `laravel.health.indicator.duration` and the meters you
+this page, and `nwidart/laravel-actuator` for the `laravel.health.*` metrics and the meters you
 create with `MeterRegistry`.
 
 `prometheus.labels` in `config/metrics.php` adds your own labels to every sample:

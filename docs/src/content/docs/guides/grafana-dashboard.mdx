@@ -51,6 +51,7 @@ providers:
 | Row                    | Panels                                                                                      | Metrics                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | Overview               | Request rate, share of 5xx responses, p95 request duration, exceptions, failed job attempts, cache hit ratio, versions | All                                                                |
+| Health                 | Application health, status of each health indicator over time                               | `laravel_health_overall_status`, `laravel_health_status`           |
 | HTTP requests          | Requests by route and by status class, duration percentiles, slowest routes, a table of every route | `http_server_request_duration_seconds`                             |
 | Database               | Queries by operation, p95 query duration by database, p95 queries per request by route, transactions by result and their p95 duration, Eloquent models by event, the most retrieved models, server connections and their limit, pending migrations | `db_client_operation_duration_seconds`, `laravel_db_queries`, `laravel_db_transaction_duration_seconds`, `laravel_eloquent_models_total`, `laravel_db_server_connections`, `laravel_db_migrations_pending` |
 | Queues                 | Jobs dispatched and processed by queue, failed attempts by job, p95 job duration, a table of every job | `messaging_process_duration_seconds`, `messaging_client_sent_messages_total` |
@@ -71,6 +72,10 @@ application, or keep **All** to add them up.
   1 ms to 10 s for queries. A p99 above 10 s shows as 10 s.
 - **p95 queries per request** reads `laravel.db.queries`, the queries each request ran, by route. A
   route at the top of the list often has an N+1 query.
+- **Application health** and **Health status, by component** are read during the scrape. With
+  several instances, each shows the most severe status. Each scrape runs the health indicators,
+  unless the [health cache](/laravel-actuator/reference/configuration/#healthcache) holds their
+  results.
 - **Database server connections** and **Pending migrations** are read during the scrape, like the
   PHP runtime row. The connections count every client of the database server, not only this
   application.

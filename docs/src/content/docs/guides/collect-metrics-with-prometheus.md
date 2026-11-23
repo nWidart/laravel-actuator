@@ -159,5 +159,30 @@ sum by (laravel_job_name) (rate(messaging_process_duration_seconds_sum[5m]))
   / sum by (laravel_job_name) (rate(messaging_process_duration_seconds_count[5m]))
 ```
 
+## Alert on health
+
+The [`laravel_health_status`](/laravel-actuator/reference/metrics/#health-status) gauge is 1 for the
+current status of each health indicator. Alert on it instead of scraping `/actuator/health`:
+
+```yaml title="alerts.yml"
+groups:
+  - name: laravel
+    rules:
+      - alert: HealthIndicatorDown
+        expr: laravel_health_status{status="DOWN"} == 1
+        for: 2m
+        annotations:
+          summary: "{{ $labels.component }} is DOWN on {{ $labels.instance }}"
+      - alert: ApplicationUnavailable
+        expr: laravel_health_overall_status{status=~"DOWN|OUT_OF_SERVICE"} == 1
+        for: 5m
+      - alert: HealthMetricsMissing
+        expr: absent(laravel_health_overall_status)
+        for: 5m
+```
+
+Each scrape runs the indicators, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+holds their results. Turn it on.
+
 For a ready-made dashboard with these queries and more, see
 [use the sample Grafana dashboard](/laravel-actuator/guides/grafana-dashboard/).
