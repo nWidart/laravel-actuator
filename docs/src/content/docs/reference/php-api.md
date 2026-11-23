@@ -249,12 +249,13 @@ discovery is off, and adds `actuator.*` to `metrics.ignore_routes`. It binds `Me
 singleton, and builds it when the application boots, in every process. When
 [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) is not empty, it
 registers a `Metrics::exclude()` filter that leaves the meters turned off out of every export. It
-registers the `actuator:health` and `actuator:metrics:clear` commands.
+registers the `actuator:build-info`, `actuator:health` and `actuator:metrics:clear` commands.
 
 ## Artisan commands
 
 | Command                              | Description                          |
 | ------------------------------------ | ------------------------------------ |
+| `php artisan actuator:build-info`    | Writes the build info file shown by the `build` contributor, at build time. |
 | `php artisan actuator:health [path]` | Checks the health of the application, a group or a component, such as `readiness/db`. |
 | `php artisan actuator:metrics:clear` | Removes every series from the store of laravel-metrics. |
 
