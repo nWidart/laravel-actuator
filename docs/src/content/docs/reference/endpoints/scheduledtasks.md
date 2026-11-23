@@ -73,8 +73,10 @@ a run as skipped, so it keeps the last execution. A record expires after 7 days 
 
 The scheduler and the web instances must share the store. Set it with
 [`scheduler.store`](/laravel-actuator/reference/configuration/#scheduler). The `file` and `array`
-stores do not work when the scheduler runs on another host. A store that fails never fails a task:
-the scheduler logs a warning and goes on. The endpoint then answers without `lastExecution`.
+stores do not work when the scheduler runs on another host. A store that fails never fails a task.
+After the first failed write, `schedule:run` logs a warning and writes no more records until it
+ends. The next `schedule:run` tries again. A store that cannot be read logs a warning, and the
+endpoint answers without `lastExecution`.
 
 A task is recorded under its [target](#targets). Two tasks with the same target share one record:
 give them different descriptions to keep them apart.

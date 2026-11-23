@@ -25,8 +25,10 @@ instances. The web instances never see a tick, so the indicator reports `DOWN` a
 no `lastExecution`. Use `redis`, `database` or `memcached`.
 :::
 
-Recording is on by default. A store that fails never stops a task: the scheduler logs a warning and
-goes on.
+Recording is on by default. A store that fails never stops a task. After the first failed write,
+`schedule:run` logs a warning and writes no more records until it ends. The next `schedule:run`, a
+minute later, tries again. A store that hangs until its timeout delays the tasks only once per
+minute.
 
 ## Turn on the indicator
 

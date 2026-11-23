@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature;
 
+use Closure;
 use Exception;
 use Illuminate\Cache\ArrayStore;
 use Illuminate\Cache\CacheManager;
@@ -23,6 +24,7 @@ use Nwidart\Actuator\Health\Indicators\SchedulerHealthIndicator;
 use Nwidart\Actuator\Health\Status;
 use Nwidart\Actuator\Support\SchedulerStore;
 use Nwidart\Actuator\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -364,8 +366,53 @@ final class ScheduledTaskRecordingTest extends TestCase
         $this->assertSame(2, $ran);
         $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
         $this->getJson('/actuator/scheduledtasks')->assertOk();
-        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => $message === 'Scheduler record could not be written: Connection refused')->once();
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => $message === 'Scheduler record could not be written: Connection refused. Recording stops for this process.')->once();
         Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => $message === 'Scheduled task executions could not be read: Connection refused')->once();
+    }
+
+    /**
+     * @return iterable<string, array{Closure(): bool}>
+     */
+    public static function failedWrites(): iterable
+    {
+        yield 'a put that throws' => [fn (): bool => throw new RuntimeException('Connection timed out')];
+        yield 'a put that returns false' => [fn (): bool => false];
+    }
+
+    #[Test]
+    #[DataProvider('failedWrites')]
+    public function writes_stop_for_the_process_after_one_fails(Closure $put): void
+    {
+        $store = new class($put) extends ArrayStore
+        {
+            public int $puts = 0;
+
+            public function __construct(private readonly Closure $put)
+            {
+                parent::__construct();
+            }
+
+            public function put($key, $value, $seconds): bool
+            {
+                $this->puts++;
+
+                return ($this->put)();
+            }
+
+            public function forever($key, $value): bool
+            {
+                return $this->put($key, $value, 0);
+            }
+        };
+        $this->useStore($store);
+        $this->schedule->call(fn () => null)->everyMinute()->description('Prune');
+
+        // A tick, then STARTED and SUCCESS twice: one write is tried, the others are skipped.
+        $this->startCommand('schedule:run');
+        $this->artisan('schedule:run')->assertExitCode(0);
+        $this->artisan('schedule:run')->assertExitCode(0);
+
+        $this->assertSame(1, $store->puts);
     }
 
     #[Test]
@@ -392,7 +439,7 @@ final class ScheduledTaskRecordingTest extends TestCase
 
         $this->assertTrue($ran);
         $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
-        Log::shouldHaveReceived('warning')->with('Scheduler record could not be written: the store rejected the entry.', [])->once();
+        Log::shouldHaveReceived('warning')->with('Scheduler record could not be written: the store rejected the entry. Recording stops for this process.', [])->once();
     }
 
     /**

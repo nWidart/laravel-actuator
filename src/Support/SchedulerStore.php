@@ -23,7 +23,9 @@ use Throwable;
  * secret. Two tasks with the same target share a record.
  *
  * Writes and endpoint reads never throw: a store that fails is logged once per kind and skipped,
- * so it never fails a scheduled task, "schedule:run" or the endpoint.
+ * so it never fails a scheduled task, "schedule:run" or the endpoint. After a write fails, the
+ * process writes no more: a store that hangs until its timeout would otherwise delay each task.
+ * "schedule:work" starts a new "schedule:run" process every minute, which tries again.
  *
  * @internal
  *
@@ -48,6 +50,7 @@ final class SchedulerStore
 
     /**
      * The kinds of problem already logged ("read", "write"), once per process, like HealthEndpoint.
+     * A logged "write" also turns writes off for the rest of the process.
      *
      * @var array<string, true>
      */
@@ -167,13 +170,17 @@ final class SchedulerStore
 
     private static function write(string $key, mixed $value, ?int $ttl): void
     {
+        if (isset(self::$logged['write'])) {
+            return;
+        }
+
         try {
             // A store can also reject an entry without throwing.
             if (! self::store()->put($key, $value, $ttl)) {
-                self::warnOnce('write', 'Scheduler record could not be written: the store rejected the entry.');
+                self::warnOnce('write', 'Scheduler record could not be written: the store rejected the entry. Recording stops for this process.');
             }
         } catch (Throwable $exception) {
-            self::warnOnce('write', "Scheduler record could not be written: {$exception->getMessage()}", $exception);
+            self::warnOnce('write', "Scheduler record could not be written: {$exception->getMessage()}. Recording stops for this process.", $exception);
         }
     }
 
