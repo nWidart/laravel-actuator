@@ -91,14 +91,15 @@ final readonly class QueueHealthIndicator implements HealthIndicator
     }
 
     /**
-     * What the queue's $method counts. Null when the queue has no public $method, as on Laravel 12.0
+     * What the queue's $method counts. Null when the queue declares no public $method, as on Laravel 12.0
      * to 12.19 and on some third-party drivers, or when it returns no number. Typed object, not
      * Queue: the Queue contract declares the method only since Laravel 12.20.
      */
     private static function count(object $queue, string $method, string $name): ?int
     {
+        // method_exists() alone accepts a protected method, is_callable() alone any name of a __call().
         $callable = [$queue, $method];
-        if (! is_callable($callable)) {
+        if (! method_exists($queue, $method) || ! is_callable($callable)) {
             return null;
         }
 

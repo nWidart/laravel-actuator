@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature\Indicators;
 
+use BadMethodCallException;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Queue;
@@ -13,6 +14,7 @@ use Mockery;
 use Nwidart\Actuator\Health\Indicators\QueueHealthIndicator;
 use Nwidart\Actuator\Health\Status;
 use Nwidart\Actuator\Tests\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
 
@@ -108,9 +110,78 @@ final class QueueHealthIndicatorTest extends TestCase
     }
 
     #[Test]
-    public function queues_without_a_connection_are_rejected(): void
+    public function a_count_that_is_not_a_number_is_left_out(): void
     {
-        config()->set('actuator.queue.queues', ['default', 'emails']);
+        $connection = new class
+        {
+            public function size(?string $queue = null): int
+            {
+                return 6;
+            }
+
+            public function pendingSize(?string $queue = null): ?int
+            {
+                return null;
+            }
+
+            public function delayedSize(?string $queue = null): string
+            {
+                return 'many';
+            }
+
+            public function reservedSize(?string $queue = null): int
+            {
+                return 2;
+            }
+        };
+
+        $health = $this->indicator(['custom' => ['default']], ['custom' => $connection])->health();
+
+        $this->assertSame(['queues' => ['custom' => ['default' => ['size' => 6, 'reserved' => 2]]]], $health->details);
+    }
+
+    #[Test]
+    public function a_driver_that_forwards_calls_counts_only_what_it_declares(): void
+    {
+        $connection = new class
+        {
+            public function size(?string $queue = null): int
+            {
+                return 6;
+            }
+
+            /** @param  array<mixed>  $arguments */
+            public function __call(string $method, array $arguments): never
+            {
+                throw new BadMethodCallException("Method [{$method}] does not exist.");
+            }
+        };
+
+        $health = $this->indicator(['custom' => ['default']], ['custom' => $connection])->health();
+
+        $this->assertSame(Status::Up, $health->status);
+        $this->assertSame(['queues' => ['custom' => ['default' => ['size' => 6]]]], $health->details);
+    }
+
+    /**
+     * @return array<string, array{mixed}>
+     */
+    public static function badlyShapedQueues(): array
+    {
+        return [
+            'no connection' => [['default', 'emails']],
+            'no queue name' => [['redis' => []]],
+            'a name that is not a string' => [['redis' => [1]]],
+            'a value that is neither a name nor a list' => [['redis' => 1]],
+            'a setting that is not a map' => ['default'],
+        ];
+    }
+
+    #[Test]
+    #[DataProvider('badlyShapedQueues')]
+    public function badly_shaped_queues_are_rejected(mixed $queues): void
+    {
+        config()->set('actuator.queue.queues', $queues);
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessage("Watched queues must map a connection name to queue names: ['connection' => ['queue', ...]].");
