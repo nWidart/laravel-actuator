@@ -161,8 +161,9 @@ laravel_queue_failed_jobs{otel_scope_name="nwidart/laravel-actuator"} 4
 ```
 
 The gauges are read during the scrape and are never stored. Each scrape reads each queue once. A
-queue that cannot be read loses its own series, and the scrape still succeeds. Every instance reads
-the same queues: aggregate with `max`, not `sum`.
+queue that cannot be read loses its own series, and the scrape still succeeds. A count by state that
+fails loses only the series by state of its queue. Every instance reads the same queues: aggregate
+with `max`, not `sum`.
 
 They are off by default. Turn them on with
 [`queue.metrics`](/laravel-actuator/reference/configuration/#queue):
@@ -172,9 +173,15 @@ ACTUATOR_QUEUE_METRICS=true
 ```
 
 Each scrape then counts the jobs of every watched queue. On the `database` driver, that is a
-`COUNT(*)` on the jobs table for each queue and state. A queue connection that hangs holds the whole
-scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance is
-missing. Keep the connect timeouts of your queue connections short.
+`COUNT(*)` on the jobs table for each queue and state. A connection that fails on its first queue
+is not tried again for its other queues in that scrape, so it costs one connect timeout per scrape.
+A connection that answers slowly still holds the whole scrape: past Prometheus' `scrape_timeout`,
+the scrape fails and every metric of the instance is missing. Keep the connect timeouts of your
+queue connections short.
+
+A badly shaped [`queue.queues`](/laravel-actuator/reference/configuration/#queue) leaves out
+`laravel.queue.size` and `laravel.queue.jobs`. Each scrape reports the `InvalidArgumentException`
+to the exception handler.
 
 [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) still applies: it
 turns off the series by state with `'laravel.queue.jobs' => false`, or every queue gauge with

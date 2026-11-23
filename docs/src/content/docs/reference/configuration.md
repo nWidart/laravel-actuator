@@ -267,12 +267,13 @@ database, cache and Redis connections short.
 
 | Key       | Description                                                                          |
 | --------- | ------------------------------------------------------------------------------------ |
-| `queues`  | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set, and the queue gauges export them. Empty, the default, watches the default queue of the default connection. Each connection needs at least one queue name. Any other shape makes the indicator `DOWN` with an `InvalidArgumentException`, and leaves `laravel.queue.size` and `laravel.queue.jobs` out with a warning in the log. |
+| `queues`  | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set, and the queue gauges export them. Empty, the default, watches the default queue of the default connection. Each connection needs at least one queue name. Any other shape makes the indicator `DOWN` with an `InvalidArgumentException`, and leaves `laravel.queue.size` and `laravel.queue.jobs` out. Each scrape then reports the exception. |
 | `metrics` | Export the [queue gauges](/laravel-actuator/reference/metrics/#queues) of the `prometheus` endpoint: the size of each queue of `queues`, its jobs by state, and the failed jobs. `false`, the default, registers nothing. A published configuration without the key is off too. |
 
 With `metrics` on, each scrape counts the jobs of every queue of `queues`. On the `database` driver,
-that is a `COUNT(*)` on the jobs table for each queue and state. A queue connection that hangs
-holds the whole scrape: keep its connect timeout short. Under Octane, the gauges and their list of
+that is a `COUNT(*)` on the jobs table for each queue and state. A connection that fails on its
+first queue is skipped for its other queues in that scrape. A slow connection still holds the whole
+scrape: keep its connect timeout short. Under Octane, the gauges and their list of
 queues are set when the worker starts: restart Octane after a change.
 
 See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
