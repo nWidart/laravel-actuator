@@ -205,18 +205,30 @@ Each queue has these counts:
 | `pending`  | integer | Jobs waiting to run. Only when the driver has `pendingSize()`.      |
 | `delayed`  | integer | Jobs waiting for their delay. Only when the driver has `delayedSize()`. |
 | `reserved` | integer | Jobs a worker runs now. Only when the driver has `reservedSize()`. |
-| `error`    | string  | Only when the queue cannot be read: `<exception class>: <exception message>`. It replaces the counts. |
+| `error`    | string  | Only when the queue cannot be read: `<exception class>: <exception message>`. It replaces the counts. When a count by state fails, the `size` stays. |
 
 The built-in drivers count `pending`, `delayed` and `reserved` since Laravel 12.20. A queue that
-cannot be read, such as an SQS queue that does not answer, does not hide the others:
+cannot be read does not hide the other connections. Within one connection, the first queue decides:
+
+- When the first queue fails, the indicator takes the connection as down. It does not try the other
+  queues of that connection, so a connection that does not answer costs one connect timeout, not one
+  per queue. Their `error` is `Skipped: the connection failed on queue [<first queue>]`.
+- When a later queue fails, such as a deleted SQS queue, only that queue shows its `error`. The
+  indicator still reads the next ones.
+
+Any error on the first queue counts as a connection error, even one of that queue alone. Watch a
+queue that may be missing after the others, or on a connection of its own.
 
 ```json
 {
   "status": "DOWN",
   "details": {
     "queues": {
-      "redis": { "default": { "size": 12, "pending": 10, "delayed": 1, "reserved": 1 } },
-      "sqs": { "reports": { "error": "Aws\\Sqs\\Exception\\SqsException: ..." } }
+      "database": { "default": { "size": 12, "pending": 10, "delayed": 1, "reserved": 1 } },
+      "redis": {
+        "default": { "error": "RedisException: Connection refused" },
+        "emails": { "error": "Skipped: the connection failed on queue [default]" }
+      }
     },
     "warningThreshold": 100,
     "downThreshold": 1000

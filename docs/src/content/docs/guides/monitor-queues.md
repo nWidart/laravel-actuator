@@ -64,6 +64,13 @@ Each queue gets its own counts in the details:
 `pending`, `delayed` and `reserved` need Laravel 12.20 or later. Before, and with a driver that
 cannot count them, the details show only `size`.
 
+A queue that cannot be read shows an `error` and makes the indicator `DOWN`. When the first queue of
+a connection fails, the indicator skips the other queues of that connection: a connection that does
+not answer costs one connect timeout per probe, not one per queue. Keep the connect timeouts of your
+queue connections below the probe's timeout. A queue that may be missing, such as an SQS queue you
+may delete, goes after the others or on a connection of its own. See
+[`QueueHealthIndicator`](/laravel-actuator/reference/health-indicators/#queuehealthindicator).
+
 ## Set the thresholds
 
 A queue at or over `warningThreshold` makes the indicator `WARNING`. A queue at or over
