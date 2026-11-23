@@ -2,7 +2,11 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
-## Unreleased
+## 1.3.1 - 2026-11-23
+
+### Changed
+
+- Requires nwidart/laravel-metrics `^0.3 || ^1.0`, so `composer update` can install laravel-metrics 1.0 and nwidart/metrics-store 1.0. laravel-metrics 1.0 has no code changes since 0.3.
 
 ### Fixed
 
