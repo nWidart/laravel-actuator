@@ -2,7 +2,7 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
-## Unreleased
+## 1.4.0 - 2026-11-23
 
 ### Added
 
