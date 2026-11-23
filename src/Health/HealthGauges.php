@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Health;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Metrics\Metrics;
@@ -15,7 +16,8 @@ use Throwable;
  * status for the whole application. A series is 1 for the current status and 0 for the others, as
  * in kube-state-metrics, so no series vanishes when a status changes.
  *
- * The indicators run once per scrape, or not at all while their results are in the health cache.
+ * Off by default ("health.metrics"). The indicators run once per scrape, or not at all while
+ * their results are in the health cache.
  *
  * @internal
  */
@@ -31,10 +33,19 @@ final class HealthGauges
     private function __construct(private readonly Container $container) {}
 
     /**
-     * Registers the gauges. Nothing runs until the metrics are exported.
+     * Registers the gauges when "health.metrics" is on. Nothing runs until the metrics are exported.
      */
     public static function register(Container $container, MeterRegistry $registry, Metrics $metrics): void
     {
+        /** @var Repository $config */
+        $config = $container->make('config');
+
+        // Off unless turned on, also with a published configuration that predates the key: each
+        // scrape would run every indicator.
+        if (! filter_var($config->get('actuator.health.metrics', false), FILTER_VALIDATE_BOOL)) {
+            return;
+        }
+
         if (! $registry->enabled(self::STATUS_METER) && ! $registry->enabled(self::OVERALL_METER)) {
             return;
         }
@@ -50,7 +61,7 @@ final class HealthGauges
         $registry->describe(self::OVERALL_METER, 'Health status of the application: 1 for its current status, 0 for the others.');
 
         /** @var array<string, mixed> $indicators */
-        $indicators = $container->make('config')->get('actuator.health.indicators', []);
+        $indicators = $config->get('actuator.health.indicators', []);
 
         foreach (Status::cases() as $status) {
             $registry->gauge(self::OVERALL_METER, ['status' => $status->value], static fn (): int => (int) ($gauges->statuses()['status'] === $status));

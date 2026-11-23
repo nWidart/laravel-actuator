@@ -72,10 +72,14 @@ application, or keep **All** to add them up.
   1 ms to 10 s for queries. A p99 above 10 s shows as 10 s.
 - **p95 queries per request** reads `laravel.db.queries`, the queries each request ran, by route. A
   route at the top of the list often has an N+1 query.
-- **Application health** and **Health status, by component** are read during the scrape. With
-  several instances, each shows the most severe status. Each scrape runs the health indicators,
-  unless the [health cache](/laravel-actuator/reference/configuration/#healthcache) holds their
-  results.
+- **Application health** and **Health status, by component** are empty until you turn on
+  [`health.metrics`](/laravel-actuator/reference/configuration/#healthmetrics). They are read during
+  the scrape, which runs the health indicators unless the
+  [health cache](/laravel-actuator/reference/configuration/#healthcache) holds their results: turn
+  the cache on, or a hanging indicator can push the scrape past `scrape_timeout`.
+- With several instances, the Health row shows the most severe status, ranked DOWN,
+  OUT_OF_SERVICE, WARNING, UP, UNKNOWN. A custom `health.status.order` does not change that
+  ranking.
 - **Database server connections** and **Pending migrations** are read during the scrape, like the
   PHP runtime row. The connections count every client of the database server, not only this
   application.

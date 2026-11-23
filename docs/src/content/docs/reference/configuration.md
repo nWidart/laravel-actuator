@@ -28,6 +28,7 @@ Keys you do not publish keep their default values.
 | `health.groups`                  | map of groups           | `liveness`, `readiness`                  |                                |
 | `health.cache.ttl`               | int (seconds)           | `0`                                      | `ACTUATOR_HEALTH_CACHE_TTL`    |
 | `health.cache.store`             | string                  | `'file'`                                 | `ACTUATOR_HEALTH_CACHE_STORE`  |
+| `health.metrics`                 | bool                    | `false`                                  | `ACTUATOR_HEALTH_METRICS`      |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
 | `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
@@ -222,6 +223,22 @@ hides behind another's success. Pick the store for your runtime:
 
 Do not use `array` under PHP-FPM: it lives for one request, so nothing is reused. Do not use `file`
 when several servers share the `storage` directory.
+
+### `health.metrics`
+
+Export the health status as the [health status gauges](/laravel-actuator/reference/metrics/#health-status)
+of the `prometheus` endpoint. `false`, the default, registers nothing. A published configuration
+without the key is off too.
+
+```php
+'metrics' => env('ACTUATOR_HEALTH_METRICS', false),
+```
+
+Each scrape runs every indicator once, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+holds its result. An indicator that hangs, such as a database that does not answer, holds the
+whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance
+is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
+database, cache and Redis connections short.
 
 A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
 and a warning is logged, once per request under PHP-FPM, once per worker under Octane. A result the store cannot serialize is answered without being cached. A published file

@@ -120,6 +120,13 @@ return [
             'ttl' => env('ACTUATOR_HEALTH_CACHE_TTL', 0),
             'store' => env('ACTUATOR_HEALTH_CACHE_STORE', 'file'),
         ],
+
+        // Export the health status as the gauges laravel_health_status and
+        // laravel_health_overall_status of the prometheus endpoint. Each
+        // scrape then runs every indicator unless the cache above holds its
+        // result: a hanging dependency can make the scrape time out. Turn
+        // the cache on and keep connect timeouts short.
+        'metrics' => env('ACTUATOR_HEALTH_METRICS', false),
     ],
 
     /*

@@ -583,7 +583,7 @@
     {
       "type": "stat",
       "title": "Application health",
-      "description": "laravel_health_overall_status: the status of /actuator/health, read during the scrape. With several instances, the most severe one.",
+      "description": "laravel_health_overall_status: the status of /actuator/health, read during the scrape. With several instances, the most severe one. Ranked DOWN, OUT_OF_SERVICE, WARNING, UP, UNKNOWN: a custom health.status.order does not change it. Empty until health.metrics is on.",
       "targets": [
         {
           "datasource": {
@@ -668,7 +668,7 @@
     {
       "type": "state-timeline",
       "title": "Health status, by component",
-      "description": "laravel_health_status: the status of each health indicator over time, read during the scrape. With several instances, the most severe one. Each scrape runs the indicators unless the health cache holds their results.",
+      "description": "laravel_health_status: the status of each health indicator over time, read during the scrape. With several instances, the most severe one. Ranked DOWN, OUT_OF_SERVICE, WARNING, UP, UNKNOWN: a custom health.status.order does not change it. Each scrape runs the indicators unless the health cache holds their results. Empty until health.metrics is on.",
       "targets": [
         {
           "datasource": {

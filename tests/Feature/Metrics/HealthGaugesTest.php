@@ -27,16 +27,44 @@ final class HealthGaugesTest extends TestCase
         $app['config']->set('actuator.exposure.include', ['health', 'prometheus']);
     }
 
+    protected function withCountingIndicatorAndDefaultConfig($app): void
+    {
+        $app['config']->set('actuator.health.indicators', ['counting' => CountingHealthIndicator::class]);
+    }
+
+    protected function withCountingIndicatorAndConfigWithoutTheKey($app): void
+    {
+        $this->withCountingIndicatorAndDefaultConfig($app);
+        $app['config']->set('actuator.health', array_diff_key($app['config']->get('actuator.health'), ['metrics' => true]));
+    }
+
     protected function withUpAndWarningIndicators($app): void
     {
+        $app['config']->set('actuator.health.metrics', true);
         $app['config']->set('actuator.health.indicators', [
             'db' => [FixedHealthIndicator::class, ['status' => 'UP']],
             'disk' => [FixedHealthIndicator::class, ['status' => 'WARNING']],
         ]);
     }
 
+    protected function withInvalidStatusOrder($app): void
+    {
+        $this->withUpAndWarningIndicators($app);
+        $app['config']->set('actuator.health.status.order', ['NOPE']);
+    }
+
+    protected function withEndpointAndGroupOrders($app): void
+    {
+        $this->withUpAndWarningIndicators($app);
+        $app['config']->set('actuator.health.status.order', ['UP', 'WARNING']);
+        $app['config']->set('actuator.health.groups', [
+            'readiness' => ['include' => ['db', 'disk'], 'status' => ['order' => ['WARNING', 'UP']]],
+        ]);
+    }
+
     protected function withFailingIndicators($app): void
     {
+        $app['config']->set('actuator.health.metrics', true);
         $app['config']->set('actuator.health.indicators', [
             'db' => [FixedHealthIndicator::class, ['status' => 'UP']],
             'broken' => [FixedHealthIndicator::class, ['status' => 'THROW']],
@@ -58,6 +86,7 @@ final class HealthGaugesTest extends TestCase
 
     protected function withCountingIndicator($app): void
     {
+        $app['config']->set('actuator.health.metrics', true);
         $app['config']->set('actuator.health.indicators', ['counting' => CountingHealthIndicator::class]);
     }
 
@@ -77,6 +106,25 @@ final class HealthGaugesTest extends TestCase
         $component = $component === null ? '' : "component=\"{$component}\",";
 
         return "{$metric}{{$component}otel_scope_name=\"nwidart/laravel-actuator\",status=\"{$status}\"}";
+    }
+
+    #[Test]
+    #[DefineEnvironment('withCountingIndicatorAndDefaultConfig')]
+    public function the_gauges_are_off_by_default(): void
+    {
+        $metrics = $this->scrape();
+
+        $this->assertStringNotContainsString('laravel_health_status', $metrics);
+        $this->assertStringNotContainsString('laravel_health_overall_status', $metrics);
+        $this->assertSame(0, CountingHealthIndicator::$runs);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withCountingIndicatorAndConfigWithoutTheKey')]
+    public function the_gauges_are_off_with_an_older_config_that_lacks_the_key(): void
+    {
+        $this->assertStringNotContainsString('laravel_health_status', $this->scrape());
+        $this->assertSame(0, CountingHealthIndicator::$runs);
     }
 
     #[Test]
@@ -125,6 +173,27 @@ final class HealthGaugesTest extends TestCase
         $this->assertStringContainsString(self::series('laravel_health_status', 'DOWN', 'broken').' 1', $metrics);
         $this->assertStringContainsString(self::series('laravel_health_status', 'DOWN', 'missing').' 1', $metrics);
         $this->assertStringContainsString(self::series('laravel_health_overall_status', 'DOWN').' 1', $metrics);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withInvalidStatusOrder')]
+    public function a_health_configuration_that_throws_leaves_the_gauges_out_and_the_scrape_succeeds(): void
+    {
+        $metrics = $this->scrape();
+
+        $this->assertStringNotContainsString('laravel_health_status{', $metrics);
+        $this->assertStringNotContainsString('laravel_health_overall_status{', $metrics);
+        $this->assertStringContainsString('laravel_info', $metrics);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withEndpointAndGroupOrders')]
+    public function the_application_status_follows_the_order_of_the_endpoint_not_of_a_group(): void
+    {
+        $metrics = $this->scrape();
+
+        $this->assertStringContainsString(self::series('laravel_health_overall_status', 'UP').' 1', $metrics);
+        $this->assertStringContainsString(self::series('laravel_health_overall_status', 'WARNING').' 0', $metrics);
     }
 
     #[Test]

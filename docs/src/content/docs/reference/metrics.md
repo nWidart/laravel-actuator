@@ -107,12 +107,23 @@ The gauges are read during the scrape and are never stored. Every indicator is i
 `show_details` and `show_components` say: protect the `prometheus` endpoint instead. An indicator
 that throws or cannot be resolved is `DOWN`, and the scrape still succeeds.
 
-Each scrape runs every indicator once, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
-holds its result. Turn the cache on, so that scrapes and probes share one run.
+They are off by default. Turn them on with
+[`health.metrics`](/laravel-actuator/reference/configuration/#healthmetrics):
 
-Both are on by default. [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable)
-turns them off with `'laravel.health' => false`, or only the component series with
-`'laravel.health.status' => false`.
+```ini title=".env"
+ACTUATOR_HEALTH_METRICS=true
+ACTUATOR_HEALTH_CACHE_TTL=5
+```
+
+Each scrape runs every indicator once, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+holds its result. An indicator that hangs, such as a database that does not answer, holds the
+whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance
+is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
+database, cache and Redis connections short.
+
+[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) still applies: it
+turns off only the component series with `'laravel.health.status' => false`, or both gauges and
+the duration histogram with `'laravel.health' => false`.
 
 A Prometheus alert when an indicator is down for 2 minutes:
 
