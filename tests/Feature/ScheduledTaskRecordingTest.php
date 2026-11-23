@@ -83,7 +83,7 @@ final class ScheduledTaskRecordingTest extends TestCase
     #[Test]
     public function a_command_that_exits_non_zero_is_an_error_after_it_finished(): void
     {
-        $this->schedule->exec('exit 3')->everyMinute();
+        $this->schedule->exec('sh -c "exit 3" --token=secret')->everyMinute();
         $order = [];
         Event::listen(ScheduledTaskFinished::class, function () use (&$order): void {
             $order[] = 'finished';
@@ -98,8 +98,18 @@ final class ScheduledTaskRecordingTest extends TestCase
         $this->assertSame([
             'time' => '2026-01-01T10:30:00+00:00',
             'status' => 'ERROR',
-            'exception' => ['type' => Exception::class, 'message' => 'Scheduled command [exit 3] failed with exit code [3].'],
-        ], $this->lastExecution('exit 3'));
+            'exception' => ['type' => Exception::class, 'message' => 'Scheduled command [sh] failed with exit code [3].'],
+        ], $this->lastExecution('sh -c "exit 3" --token=secret'));
+    }
+
+    #[Test]
+    public function a_callback_that_throws_a_plain_exception_keeps_its_message(): void
+    {
+        $this->schedule->call(fn () => throw new Exception('Quota reached'))->everyMinute()->description('Send');
+
+        $this->artisan('schedule:run');
+
+        $this->assertSame(['type' => Exception::class, 'message' => 'Quota reached'], $this->lastExecution('Send')['exception'] ?? null);
     }
 
     #[Test]

@@ -10,6 +10,7 @@ use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
 use Throwable;
 
@@ -50,6 +51,10 @@ final class ScheduledTaskRecorder
      * process can still take the mutex after that filter: the run is then skipped after this
      * event, and must not overwrite the last execution. The mutex of a run that goes ahead is
      * only created after this event, by Event::run().
+     *
+     * The check is best-effort, like Laravel's own filter, which calls the same exists(): it is
+     * not atomic with the mutex->create() in Event::run(), so it narrows the window but does not
+     * close it. A second server can still leave STARTED for a run that never happens.
      */
     public function starting(ScheduledTaskStarting $event): void
     {
@@ -72,18 +77,28 @@ final class ScheduledTaskRecorder
         }
     }
 
+    /**
+     * For a command that exits non-zero, ScheduleRunCommand throws an Exception whose message holds
+     * the whole command: it is replaced by the same message as for a background command. Other
+     * exceptions keep their message.
+     */
     public function failed(ScheduledTaskFailed $event): void
     {
-        SchedulerStore::recordExecution($event->task, SchedulerStore::ERROR, [
-            'type' => $event->exception::class,
-            'message' => $event->exception->getMessage(),
+        $task = $event->task;
+        $exception = $event->exception;
+
+        if (! $task instanceof CallbackEvent && $exception::class === Exception::class && ! in_array($task->exitCode, [0, null], true)) {
+            SchedulerStore::recordExecution($task, SchedulerStore::ERROR, self::exitCodeException($task));
+
+            return;
+        }
+
+        SchedulerStore::recordExecution($task, SchedulerStore::ERROR, [
+            'type' => $exception::class,
+            'message' => $exception->getMessage(),
         ]);
     }
 
-    /**
-     * The exception ScheduleRunCommand reports for a foreground command that exits non-zero, with
-     * the task's short name instead of its command: the arguments can hold a secret.
-     */
     public function backgroundFinished(ScheduledBackgroundTaskFinished $event): void
     {
         $task = $event->task;
@@ -94,10 +109,21 @@ final class ScheduledTaskRecorder
             return;
         }
 
-        SchedulerStore::recordExecution($task, SchedulerStore::ERROR, [
+        SchedulerStore::recordExecution($task, SchedulerStore::ERROR, self::exitCodeException($task));
+    }
+
+    /**
+     * The exception ScheduleRunCommand reports for a command that exits non-zero, with the task's
+     * short name instead of its command: the arguments can hold a secret.
+     *
+     * @return array{type: string, message: string}
+     */
+    private static function exitCodeException(Event $task): array
+    {
+        return [
             'type' => Exception::class,
             'message' => 'Scheduled command ['.ScheduledTaskTarget::name($task)."] failed with exit code [{$task->exitCode}].",
-        ]);
+        ];
     }
 
     /**
