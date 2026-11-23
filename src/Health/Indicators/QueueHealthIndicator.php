@@ -81,12 +81,29 @@ final readonly class QueueHealthIndicator implements HealthIndicator
         $counts = ['size' => $queue->size($name)];
 
         foreach (self::COUNTS as $key => $method) {
-            // Laravel 12.0 to 12.19 and third-party drivers may lack them.
-            if (method_exists($queue, $method)) {
-                $counts[$key] = (int) $queue->{$method}($name);
+            $count = self::count($queue, $method, $name);
+            if ($count !== null) {
+                $counts[$key] = $count;
             }
         }
 
         return $counts;
+    }
+
+    /**
+     * What the queue's $method counts. Null when the queue has no public $method, as on Laravel 12.0
+     * to 12.19 and on some third-party drivers, or when it returns no number. Typed object, not
+     * Queue: the Queue contract declares the method only since Laravel 12.20.
+     */
+    private static function count(object $queue, string $method, string $name): ?int
+    {
+        $callable = [$queue, $method];
+        if (! is_callable($callable)) {
+            return null;
+        }
+
+        $count = $callable($name);
+
+        return is_numeric($count) ? (int) $count : null;
     }
 }

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
 use Mockery;
 use Nwidart\Actuator\Health\Indicators\QueueHealthIndicator;
 use Nwidart\Actuator\Health\Status;
@@ -82,6 +83,39 @@ final class QueueHealthIndicatorTest extends TestCase
             'redis' => ['default' => ['size' => 4]],
             'sqs' => ['reports' => ['error' => 'RuntimeException: Queue [reports] unreachable']],
         ]], $health->details);
+    }
+
+    #[Test]
+    public function a_count_the_driver_does_not_make_public_is_left_out(): void
+    {
+        $connection = new class
+        {
+            public function size(?string $queue = null): int
+            {
+                return 6;
+            }
+
+            protected function pendingSize(?string $queue = null): int
+            {
+                return 5;
+            }
+        };
+
+        $health = $this->indicator(['custom' => ['default']], ['custom' => $connection])->health();
+
+        $this->assertSame(Status::Up, $health->status);
+        $this->assertSame(['queues' => ['custom' => ['default' => ['size' => 6]]]], $health->details);
+    }
+
+    #[Test]
+    public function queues_without_a_connection_are_rejected(): void
+    {
+        config()->set('actuator.queue.queues', ['default', 'emails']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("Watched queues must map a connection name to queue names: ['connection' => ['queue', ...]].");
+
+        $this->indicator(null, [])->health();
     }
 
     #[Test]

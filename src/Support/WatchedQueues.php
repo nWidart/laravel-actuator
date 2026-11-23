@@ -5,23 +5,25 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Support;
 
 use Illuminate\Contracts\Config\Repository;
+use InvalidArgumentException;
 
 /**
- * The queues actuator watches, as connection name => queue names. An empty list falls back to
- * "actuator.queue.queues", and an empty setting to the default queue of the default connection.
+ * The queues actuator watches, as connection name => queue names. Null reads
+ * "actuator.queue.queues". An empty map watches the default queue of the default connection.
  *
  * @internal
  */
 final class WatchedQueues
 {
     /**
-     * @param  array<string, string|array<array-key, string>>|null  $queues  connection => queue names, or one queue name. Null reads "actuator.queue.queues".
+     * @param  array<mixed>|null  $queues  connection => queue names, or one queue name. Null reads "actuator.queue.queues".
      * @return array<string, list<string>>
+     *
+     * @throws InvalidArgumentException when the queues are not queue names keyed by connection name
      */
     public static function resolve(Repository $config, ?array $queues = null): array
     {
-        /** @var array<string, string|array<array-key, string>> $queues */
-        $queues = $queues ?? $config->get('actuator.queue.queues', []) ?? [];
+        $queues ??= $config->get('actuator.queue.queues') ?? [];
 
         if ($queues === []) {
             $connection = $config->get('queue.default');
@@ -31,6 +33,17 @@ final class WatchedQueues
             return [$connection => [is_string($queue) && $queue !== '' ? $queue : 'default']];
         }
 
-        return array_map(static fn (string|array $names): array => array_values((array) $names), $queues);
+        $watched = [];
+        foreach (is_array($queues) ? $queues : [0 => $queues] as $connection => $names) {
+            $names = is_string($names) ? [$names] : $names;
+
+            if (! is_string($connection) || ! is_array($names) || $names === [] || array_filter($names, is_string(...)) !== $names) {
+                throw new InvalidArgumentException("Watched queues must map a connection name to queue names: ['connection' => ['queue', ...]].");
+            }
+
+            $watched[$connection] = array_values($names);
+        }
+
+        return $watched;
     }
 }
