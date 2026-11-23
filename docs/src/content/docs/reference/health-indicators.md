@@ -18,6 +18,7 @@ passed by name in the [definition](/laravel-actuator/reference/configuration/#de
 | `queue`          | `QueueHealthIndicator`           | No                 |
 | `failedJobs`     | `FailedJobsHealthIndicator`      | No                 |
 | `horizon`        | `HorizonHealthIndicator`         | No                 |
+| `scheduler`      | `SchedulerHealthIndicator`       | No                 |
 
 ## `PingHealthIndicator`
 
@@ -277,6 +278,35 @@ Arguments: none.
 | `status`  | string  | `running`, `paused` or `inactive`.                         |
 | `masters` | integer | The master supervisors, one for each `php artisan horizon` process. |
 | `error`   | string  | Only when `UNKNOWN`: `laravel/horizon is not installed`.   |
+
+## `SchedulerHealthIndicator`
+
+Checks that the scheduler ticks. Each `php artisan schedule:run` records the time it starts in the
+store set by [`scheduler.store`](/laravel-actuator/reference/configuration/#scheduler).
+`schedule:work` starts `schedule:run` every minute. The indicator reads that time back. See
+[monitor the scheduler](/laravel-actuator/guides/monitor-the-scheduler/).
+
+| Argument       | Type            | Default | Description                                            |
+| -------------- | --------------- | ------- | ------------------------------------------------------ |
+| `downAfter`    | integer         | `5`     | Minutes without a tick after which the scheduler is `DOWN`. |
+| `warningAfter` | integer or null | `2`     | Minutes without a tick after which the scheduler is `WARNING`. `null` turns `WARNING` off. |
+
+| Status    | When                                                                     |
+| --------- | ------------------------------------------------------------------------ |
+| `UP`      | The last tick is at most `warningAfter` minutes old.                     |
+| `WARNING` | The last tick is more than `warningAfter` and at most `downAfter` minutes old. |
+| `DOWN`    | The last tick is more than `downAfter` minutes old, the scheduler never ticked, or the store throws. |
+| `UNKNOWN` | `scheduler.record` is `false`, so nothing records the ticks.              |
+
+| Detail         | Type            | Description                                                 |
+| -------------- | --------------- | ----------------------------------------------------------- |
+| `lastTick`     | string or null  | The last tick, ISO 8601. `null` when the scheduler never ticked. Left out when `UNKNOWN`. |
+| `downAfter`    | integer         | The configured argument, in minutes.                        |
+| `warningAfter` | integer or null | The configured argument, in minutes.                        |
+| `error`        | string          | Only when `UNKNOWN`: why.                                   |
+
+The store must be shared by the scheduler and the instance that runs the check. With the `file` or
+`array` store, a check on another host never sees a tick and reports `DOWN`.
 
 ## Error detail
 

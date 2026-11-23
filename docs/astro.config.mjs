@@ -54,6 +54,7 @@ export default defineConfig({
 								{ slug: 'guides/define-health-groups' },
 								{ slug: 'guides/show-health-details' },
 								{ slug: 'guides/monitor-queues' },
+								{ slug: 'guides/monitor-the-scheduler' },
 							],
 						},
 						{

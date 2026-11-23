@@ -37,6 +37,9 @@ Keys you do not publish keep their default values.
 | `env.show_values`                | visibility              | `'never'`                                |                                |
 | `mappings.middleware`            | list of strings         | `[]`                                     |                                |
 | `scheduledtasks.middleware`      | list of strings         | `[]`                                     |                                |
+| `scheduledtasks.show_exceptions` | visibility              | `'never'`                                |                                |
+| `scheduler.record`               | bool                    | `true`                                   | `ACTUATOR_SCHEDULER_RECORD`    |
+| `scheduler.store`                | string or `null`        | `null`                                   | `ACTUATOR_SCHEDULER_STORE`     |
 | `prometheus.middleware`          | list of strings         | `[]`                                     |                                |
 | `metrics.enable`                 | map of booleans         | `[]`                                     |                                |
 | `metrics.distribution.slo`       | map of lists of numbers | `[]`                                     |                                |
@@ -316,10 +319,34 @@ See the [info contributors reference](/laravel-actuator/reference/info-contribut
 
 'scheduledtasks' => [
     'middleware' => [],
+    'show_exceptions' => 'never',
 ],
 ```
 
-Each key holds the middleware added after the shared `middleware`.
+| Key                              | Description                                                           |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `mappings.middleware`            | Middleware added after the shared `middleware`.                       |
+| `scheduledtasks.middleware`      | Middleware added after the shared `middleware`.                       |
+| `scheduledtasks.show_exceptions` | [Visibility](#visibility-values) of the exception message in a task's `lastExecution`. The exception type is always shown. |
+
+## `scheduler`
+
+```php
+'scheduler' => [
+    'record' => env('ACTUATOR_SCHEDULER_RECORD', true),
+    'store' => env('ACTUATOR_SCHEDULER_STORE'),
+],
+```
+
+| Key      | Description                                                                         |
+| -------- | ----------------------------------------------------------------------------------- |
+| `record` | Record the last execution of each scheduled task and each tick of `schedule:run`. `false` turns recording off: the `scheduledtasks` endpoint leaves out `lastExecution`, and the `scheduler` indicator reports `UNKNOWN`. |
+| `store`  | The cache store for the records. `null` uses the application's default store.      |
+
+The scheduler writes the records, and the web instances read them, so the store must be shared:
+`redis`, `database` or `memcached`, for example. The `file` and `array` stores do not work when the
+scheduler runs on another host. A task's record expires after 7 days without a run. The tick never
+expires. See [monitor the scheduler](/laravel-actuator/guides/monitor-the-scheduler/).
 
 ## `prometheus`
 
@@ -396,7 +423,7 @@ then mixes their samples. After you change the bounds of a meter,
 
 ## Visibility values
 
-`show_details`, `show_components` and `show_values` accept:
+`show_details`, `show_components`, `show_values` and `show_exceptions` accept:
 
 | Value               | Grants access                                                           |
 | ------------------- | ----------------------------------------------------------------------- |

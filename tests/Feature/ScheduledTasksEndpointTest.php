@@ -4,8 +4,13 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature;
 
+use Illuminate\Console\Events\ScheduledTaskFailed;
+use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Gate;
+use LogicException;
 use Nwidart\Actuator\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 
@@ -49,5 +54,107 @@ final class ScheduledTasksEndpointTest extends TestCase
         $this->getJson('/actuator/scheduledtasks')
             ->assertOk()
             ->assertExactJson(['cron' => [], 'fixedDelay' => [], 'fixedRate' => [], 'custom' => []]);
+    }
+
+    #[Test]
+    public function it_reports_the_last_execution_in_the_spring_boot_shape(): void
+    {
+        Carbon::setTestNow('2026-01-01 10:30:00 UTC');
+        $schedule = $this->app->make(Schedule::class);
+        $report = $schedule->command('inspire')->dailyAt('12:00');
+        $poll = $schedule->call(fn () => null)->everyTenSeconds()->description('Poll');
+        $schedule->command('migrate')->daily();
+
+        event(new ScheduledTaskStarting($report));
+        Carbon::setTestNow('2026-01-01 10:30:05 UTC');
+        event(new ScheduledTaskStarting($poll));
+
+        $this->getJson('/actuator/scheduledtasks')->assertOk()->assertExactJson([
+            'cron' => [
+                [
+                    'runnable' => ['target' => 'php artisan inspire'],
+                    'expression' => '0 12 * * *',
+                    'timezone' => 'UTC',
+                    'nextExecution' => ['time' => '2026-01-01T12:00:00+00:00'],
+                    'lastExecution' => ['time' => '2026-01-01T10:30:00+00:00', 'status' => 'STARTED'],
+                ],
+                [
+                    'runnable' => ['target' => 'php artisan migrate'],
+                    'expression' => '0 0 * * *',
+                    'timezone' => 'UTC',
+                    'nextExecution' => ['time' => '2026-01-02T00:00:00+00:00'],
+                ],
+            ],
+            'fixedDelay' => [],
+            'fixedRate' => [[
+                'runnable' => ['target' => 'Poll'],
+                'initialDelay' => 0,
+                'interval' => 10000,
+                'lastExecution' => ['time' => '2026-01-01T10:30:05+00:00', 'status' => 'STARTED'],
+            ]],
+            'custom' => [],
+        ]);
+    }
+
+    #[Test]
+    public function it_hides_the_exception_message_by_default(): void
+    {
+        $this->failTask();
+
+        $this->getJson('/actuator/scheduledtasks')
+            ->assertJsonPath('cron.0.lastExecution.status', 'ERROR')
+            ->assertJsonPath('cron.0.lastExecution.exception', ['type' => LogicException::class]);
+    }
+
+    #[Test]
+    public function it_shows_the_exception_message_when_allowed(): void
+    {
+        config()->set('actuator.scheduledtasks.show_exceptions', 'always');
+        $this->failTask();
+
+        $this->getJson('/actuator/scheduledtasks')
+            ->assertJsonPath('cron.0.lastExecution.exception', ['type' => LogicException::class, 'message' => 'token=secret']);
+    }
+
+    #[Test]
+    public function it_shows_the_exception_message_to_authorized_users(): void
+    {
+        config()->set('actuator.scheduledtasks.show_exceptions', 'when_authorized');
+        Gate::define('viewActuator', fn (User $user): bool => true);
+        $this->failTask();
+
+        $this->getJson('/actuator/scheduledtasks')->assertJsonPath('cron.0.lastExecution.exception', ['type' => LogicException::class]);
+        $this->actingAs(new User)->getJson('/actuator/scheduledtasks')
+            ->assertJsonPath('cron.0.lastExecution.exception', ['type' => LogicException::class, 'message' => 'token=secret']);
+    }
+
+    #[Test]
+    public function tasks_with_the_same_target_share_a_record(): void
+    {
+        $schedule = $this->app->make(Schedule::class);
+        $first = $schedule->command('inspire')->hourly();
+        $schedule->command('inspire')->daily();
+
+        event(new ScheduledTaskStarting($first));
+
+        $response = $this->getJson('/actuator/scheduledtasks');
+        $this->assertSame('STARTED', $response->json('cron.0.lastExecution.status'));
+        $this->assertSame('STARTED', $response->json('cron.1.lastExecution.status'));
+    }
+
+    #[Test]
+    public function it_leaves_the_last_execution_out_when_recording_is_off(): void
+    {
+        $this->failTask();
+        config()->set('actuator.scheduler.record', false);
+
+        $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
+    }
+
+    private function failTask(): void
+    {
+        $task = $this->app->make(Schedule::class)->command('report:send')->daily();
+
+        event(new ScheduledTaskFailed($task, new LogicException('token=secret')));
     }
 }

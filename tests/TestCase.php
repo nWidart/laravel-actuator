@@ -6,6 +6,7 @@ namespace Nwidart\Actuator\Tests;
 
 use Nwidart\Actuator\ActuatorServiceProvider;
 use Nwidart\Actuator\Health\HealthEndpoint;
+use Nwidart\Actuator\Support\SchedulerStore;
 use Orchestra\Testbench\TestCase as Orchestra;
 use ReflectionProperty;
 
@@ -15,8 +16,9 @@ abstract class TestCase extends Orchestra
     {
         parent::setUp();
 
-        // HealthEndpoint keeps the health cache warnings it logged in a static: start each test with none.
+        // HealthEndpoint and SchedulerStore keep the warnings they logged in a static: start each test with none.
         (new ReflectionProperty(HealthEndpoint::class, 'logged'))->setValue(null, []);
+        (new ReflectionProperty(SchedulerStore::class, 'logged'))->setValue(null, []);
     }
 
     protected function getPackageProviders($app): array

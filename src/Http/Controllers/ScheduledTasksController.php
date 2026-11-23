@@ -13,10 +13,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Date;
 use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
 use Nwidart\Actuator\Support\ScheduledTaskTarget;
+use Nwidart\Actuator\Support\SchedulerStore;
+use Nwidart\Actuator\Visibility;
 
 /**
  * Scheduled tasks, in the Spring Boot "scheduledtasks" format.
  * Sub-minute tasks are listed as "fixedRate" with an interval in milliseconds.
+ * A task's "lastExecution" comes from the SchedulerStore, and is left out when it has none.
+ *
+ * @phpstan-import-type LastExecution from SchedulerStore
  */
 final class ScheduledTasksController
 {
@@ -26,27 +31,55 @@ final class ScheduledTasksController
         // Schedules defined in routes/console.php or withSchedule() only load with the console kernel.
         $app->make(Kernel::class)->all();
 
+        $events = $app->make(Schedule::class)->events();
+        $targets = array_map(ScheduledTaskTarget::of(...), $events);
+        $executions = SchedulerStore::recording() ? SchedulerStore::lastExecutions(array_values($targets)) : [];
+        $showMessage = Visibility::fromConfig(config('actuator.scheduledtasks.show_exceptions', 'never'))->isGranted();
+
+        /**
+         * @param  array<string, mixed>  $task
+         * @return array<string, mixed>
+         */
+        $withLastExecution = static fn (array $task, string $target): array => isset($executions[$target])
+            ? [...$task, 'lastExecution' => self::lastExecution($executions[$target], $showMessage)]
+            : $task;
+
         $cron = [];
         $fixedRate = [];
 
-        foreach ($app->make(Schedule::class)->events() as $event) {
-            $runnable = ['target' => ScheduledTaskTarget::of($event)];
+        foreach ($events as $index => $event) {
+            $runnable = ['target' => $targets[$index]];
 
             if ($event->isRepeatable()) {
-                $fixedRate[] = ['runnable' => $runnable, 'initialDelay' => 0, 'interval' => $event->repeatSeconds * 1000];
+                $fixedRate[] = $withLastExecution(['runnable' => $runnable, 'initialDelay' => 0, 'interval' => $event->repeatSeconds * 1000], $targets[$index]);
 
                 continue;
             }
 
-            $cron[] = [
+            $cron[] = $withLastExecution([
                 'runnable' => $runnable,
                 'expression' => $event->getExpression(),
                 'timezone' => $this->timezone($event),
                 'nextExecution' => ['time' => $event->nextRunDate(Date::now())->toIso8601String()],
-            ];
+            ], $targets[$index]);
         }
 
         return new JsonResponse(['cron' => $cron, 'fixedDelay' => [], 'fixedRate' => $fixedRate, 'custom' => []]);
+    }
+
+    /**
+     * The exception's type is always shown, its message only when "show_exceptions" allows it.
+     *
+     * @param  LastExecution  $execution
+     * @return array<string, mixed>
+     */
+    private static function lastExecution(array $execution, bool $showMessage): array
+    {
+        if (isset($execution['exception']) && ! $showMessage) {
+            unset($execution['exception']['message']);
+        }
+
+        return $execution;
     }
 
     private function timezone(Event $event): string
