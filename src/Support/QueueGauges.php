@@ -10,7 +10,6 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Queue\Failed\CountableFailedJobProvider;
 use Illuminate\Queue\Failed\FailedJobProviderInterface;
-use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Metrics\Metrics;
@@ -23,7 +22,8 @@ use Throwable;
  * jobs, where the failer counts them.
  *
  * Off by default ("queue.metrics"). Each queue is read once per scrape. A queue that cannot be
- * read loses only its own series.
+ * read loses only its own series. A connection that fails on its first queue is not tried again for
+ * its other queues in the same scrape: each would wait for the connect timeout.
  *
  * @internal
  */
@@ -37,7 +37,7 @@ final class QueueGauges
 
     private const STATES = ['pending', 'delayed', 'reserved'];
 
-    /** @var array<string, array<string, array<string, int>|Throwable>>|null connection => queue => counts, or why the queue could not be read */
+    /** @var array<string, array<string, array<string, int|Throwable>|Throwable>>|null connection => queue => size and states, or why the queue could not be read */
     private ?array $counts = null;
 
     /**
@@ -66,8 +66,11 @@ final class QueueGauges
         try {
             $queues = WatchedQueues::resolve($config);
         } catch (InvalidArgumentException $exception) {
-            // A badly shaped "queue.queues" must not break every request: only the queue gauges are left out.
-            Log::warning("The queue gauges are off: {$exception->getMessage()}", ['exception' => $exception]);
+            // A badly shaped "queue.queues" must not break every request: the queue gauges are left
+            // out, and the error is reported when the metrics are exported, not on every boot.
+            $metrics->onExport(static function () use ($exception): void {
+                report($exception);
+            });
             $queues = [];
         }
 
@@ -108,41 +111,81 @@ final class QueueGauges
 
     /**
      * What the queue holds in $key this export, or null when its driver does not count it. A queue
-     * that cannot be read throws for each of its series: the registry reports it once and skips them.
+     * or count that cannot be read throws for each of its series: the registry reports it once and
+     * skips them.
      */
     private function count(string $connection, string $name, string $key): ?int
     {
         $counts = $this->counts()[$connection][$name] ?? null;
+        $count = $counts instanceof Throwable ? $counts : $counts[$key] ?? null;
 
-        if ($counts instanceof Throwable) {
-            throw $counts;
+        if ($count instanceof Throwable) {
+            throw $count;
         }
 
-        return $counts[$key] ?? null;
+        return $count;
     }
 
     /**
-     * @return array<string, array<string, array<string, int>|Throwable>>
+     * @return array<string, array<string, array<string, int|Throwable>|Throwable>>
      */
     private function counts(): array
     {
         if ($this->counts === null) {
-            // Resolved from the current container, not the one of the registration: under Octane
-            // that is the request's sandbox, while the gauges live as long as the worker.
             $this->counts = [];
 
             foreach ($this->queues as $connection => $names) {
-                foreach ($names as $name) {
-                    try {
-                        $queue = CurrentContainer::getInstance()->make(QueueFactory::class)->connection($connection);
-                        $this->counts[$connection][$name] = ['size' => $queue->size($name), ...WatchedQueues::counts($queue, $name)];
-                    } catch (Throwable $exception) {
-                        $this->counts[$connection][$name] = $exception;
-                    }
-                }
+                $this->counts[$connection] = self::read($connection, $names);
             }
         }
 
         return $this->counts;
+    }
+
+    /**
+     * The counts of the queues of one connection. Until one queue answers, a failure is taken as the
+     * connection's: its other queues are skipped rather than each waiting for the connect timeout.
+     *
+     * @param  list<string>  $names
+     * @return array<string, array<string, int|Throwable>|Throwable>
+     */
+    private static function read(string $connection, array $names): array
+    {
+        try {
+            // Resolved from the current container, not the one of the registration: under Octane
+            // that is the request's sandbox, while the gauges live as long as the worker.
+            $queue = CurrentContainer::getInstance()->make(QueueFactory::class)->connection($connection);
+        } catch (Throwable $exception) {
+            return array_fill_keys($names, $exception);
+        }
+
+        $counts = [];
+        $reached = false;
+
+        foreach ($names as $name) {
+            try {
+                $size = $queue->size($name);
+                $reached = true;
+            } catch (Throwable $exception) {
+                if (! $reached) {
+                    return array_fill_keys($names, $exception);
+                }
+
+                $counts[$name] = $exception;
+
+                continue;
+            }
+
+            try {
+                $states = WatchedQueues::counts($queue, $name);
+            } catch (Throwable $exception) {
+                // The size is still exported: only the series by state are lost.
+                $states = array_fill_keys(self::STATES, $exception);
+            }
+
+            $counts[$name] = ['size' => $size, ...$states];
+        }
+
+        return $counts;
     }
 }

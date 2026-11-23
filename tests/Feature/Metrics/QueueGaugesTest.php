@@ -8,7 +8,9 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Queue\Factory as QueueFactory;
 use Illuminate\Queue\Failed\CountableFailedJobProvider;
 use Illuminate\Queue\Failed\FailedJobProviderInterface;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Mockery;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Actuator\Support\QueueGauges;
@@ -193,6 +195,70 @@ final class QueueGaugesTest extends TestCase
 
     #[Test]
     #[DefineEnvironment('withQueueMetrics')]
+    public function a_connection_that_fails_on_its_first_queue_is_not_tried_for_its_other_queues(): void
+    {
+        $this->fakeQueues([
+            'redis' => $this->sized([]),
+            'sqs' => $this->sized(['reports' => 5]),
+        ]);
+
+        $metrics = $this->scrape();
+
+        // One attempt on redis, whose connect timeout each queue would otherwise wait for, one on sqs.
+        $this->assertSame(2, $this->reads);
+        $this->assertStringNotContainsString('connection="redis"', $metrics);
+        $this->assertStringContainsString(self::sizeSeries('sqs', 'reports')." 5\n", $metrics);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withQueueMetrics')]
+    public function a_connection_that_cannot_be_resolved_is_resolved_once_per_scrape(): void
+    {
+        $factory = Mockery::mock(QueueFactory::class);
+        $factory->expects('connection')->with('redis')->once()->andThrow(new RuntimeException('Connection refused'));
+        $factory->allows('connection')->with('sqs')->andReturn($this->sized(['reports' => 5]));
+        $this->app->instance(QueueFactory::class, $factory);
+
+        $metrics = $this->scrape();
+
+        $this->assertStringNotContainsString('connection="redis"', $metrics);
+        $this->assertStringContainsString(self::sizeSeries('sqs', 'reports')." 5\n", $metrics);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withQueueMetrics')]
+    public function a_count_by_state_that_fails_keeps_the_size(): void
+    {
+        $this->fakeQueues([
+            'redis' => new class
+            {
+                public function size(?string $queue = null): int
+                {
+                    return 6;
+                }
+
+                public function pendingSize(?string $queue = null): int
+                {
+                    return 5;
+                }
+
+                public function reservedSize(?string $queue = null): int
+                {
+                    throw new RuntimeException('READONLY');
+                }
+            },
+            'sqs' => $this->sized(['reports' => 1]),
+        ]);
+
+        $metrics = $this->scrape();
+
+        $this->assertStringContainsString(self::sizeSeries('redis', 'default')." 6\n", $metrics);
+        $this->assertStringContainsString(self::sizeSeries('redis', 'emails')." 6\n", $metrics);
+        $this->assertStringNotContainsString('laravel_queue_jobs{connection="redis"', $metrics);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withQueueMetrics')]
     public function a_count_the_driver_does_not_make_public_is_left_out(): void
     {
         $this->fakeQueues([
@@ -241,6 +307,9 @@ final class QueueGaugesTest extends TestCase
         $factory = Mockery::mock(QueueFactory::class);
         $factory->allows('connection')->andReturn($this->sized(['default' => 40, 'emails' => 41, 'reports' => 42]));
         $sandbox->instance(QueueFactory::class, $factory);
+        $failer = Mockery::mock(FailedJobProviderInterface::class, CountableFailedJobProvider::class);
+        $failer->allows('count')->andReturn(9);
+        $sandbox->instance('queue.failer', $failer);
 
         try {
             $metrics = $this->scrape();
@@ -250,6 +319,7 @@ final class QueueGaugesTest extends TestCase
 
         $this->assertStringContainsString(self::sizeSeries('redis', 'default')." 40\n", $metrics);
         $this->assertStringContainsString(self::sizeSeries('sqs', 'reports')." 42\n", $metrics);
+        $this->assertStringContainsString(self::FAILED." 9\n", $metrics);
     }
 
     #[Test]
@@ -285,13 +355,30 @@ final class QueueGaugesTest extends TestCase
 
     #[Test]
     #[DefineEnvironment('withBadlyShapedQueues')]
-    public function badly_shaped_queues_log_a_warning(): void
+    public function badly_shaped_queues_log_and_report_nothing_on_boot(): void
     {
         Log::spy();
+        Exceptions::fake();
 
+        // What every request runs when the application boots, scrape or not.
         QueueGauges::register($this->app, $this->app->make(MeterRegistry::class), $this->app->make(Metrics::class));
 
-        Log::shouldHaveReceived('warning')->once()->withArgs(static fn (string $message): bool => str_starts_with($message, 'The queue gauges are off: Watched queues must map a connection name to queue names'));
+        Log::shouldNotHaveReceived('warning');
+        Exceptions::assertNothingReported();
+    }
+
+    #[Test]
+    #[DefineEnvironment('withBadlyShapedQueues')]
+    public function badly_shaped_queues_are_reported_once_per_scrape(): void
+    {
+        Exceptions::fake();
+
+        $this->scrape();
+        Exceptions::assertReportedCount(1);
+        Exceptions::assertReported(static fn (InvalidArgumentException $exception): bool => str_starts_with($exception->getMessage(), 'Watched queues must map a connection name to queue names'));
+
+        $this->scrape();
+        Exceptions::assertReportedCount(2);
     }
 
     /**
