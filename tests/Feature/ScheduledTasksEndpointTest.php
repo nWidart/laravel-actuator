@@ -129,6 +129,18 @@ final class ScheduledTasksEndpointTest extends TestCase
     }
 
     #[Test]
+    public function a_message_that_is_not_valid_utf8_is_answered(): void
+    {
+        config()->set('actuator.scheduledtasks.show_exceptions', 'always');
+        $task = $this->app->make(Schedule::class)->command('report:send')->daily();
+        event(new ScheduledTaskFailed($task, new LogicException("Invalid byte \xB1 here")));
+
+        $this->getJson('/actuator/scheduledtasks')
+            ->assertOk()
+            ->assertJsonPath('cron.0.lastExecution.exception.message', "Invalid byte \u{FFFD} here");
+    }
+
+    #[Test]
     public function tasks_with_the_same_target_share_a_record(): void
     {
         $schedule = $this->app->make(Schedule::class);

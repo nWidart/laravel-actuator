@@ -64,7 +64,9 @@ final class ScheduledTasksController
             ], $targets[$index]);
         }
 
-        return new JsonResponse(['cron' => $cron, 'fixedDelay' => [], 'fixedRate' => $fixedRate, 'custom' => []]);
+        // A stored exception message, or a target, can hold bytes that are not UTF-8: they are
+        // replaced, rather than failing the endpoint until the record expires.
+        return new JsonResponse(['cron' => $cron, 'fixedDelay' => [], 'fixedRate' => $fixedRate, 'custom' => []], options: JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     /**
