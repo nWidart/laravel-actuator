@@ -8,6 +8,7 @@ use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Queue\Queue;
 use InvalidArgumentException;
+use ReflectionMethod;
 use Throwable;
 
 /**
@@ -119,13 +120,13 @@ final class WatchedQueues
         $counts = [];
 
         foreach (self::COUNTS as $state => $method) {
-            // method_exists() alone accepts a protected method, is_callable() alone any name of a __call().
-            $callable = [$queue, $method];
-            if (! method_exists($queue, $method) || ! is_callable($callable)) {
+            // method_exists() alone accepts a protected method, and is_callable() any name of a
+            // __call(), even that of a protected method: only a declared public method counts.
+            if (! method_exists($queue, $method) || ! (new ReflectionMethod($queue, $method))->isPublic()) {
                 continue;
             }
 
-            $count = $callable($name);
+            $count = $queue->{$method}($name);
             if (is_numeric($count)) {
                 $counts[$state] = (int) $count;
             }

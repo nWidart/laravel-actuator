@@ -241,6 +241,34 @@ final class QueueHealthIndicatorTest extends TestCase
         $this->assertSame(['queues' => ['custom' => ['default' => ['size' => 6]]]], $health->details);
     }
 
+    #[Test]
+    public function a_protected_count_is_not_reached_through_call(): void
+    {
+        $connection = new class
+        {
+            public function size(?string $queue = null): int
+            {
+                return 6;
+            }
+
+            protected function pendingSize(?string $queue = null): int
+            {
+                return 5;
+            }
+
+            /** @param  array<mixed>  $arguments */
+            public function __call(string $method, array $arguments): never
+            {
+                throw new BadMethodCallException("Method [{$method}] does not exist.");
+            }
+        };
+
+        $health = $this->indicator(['custom' => ['default']], ['custom' => $connection])->health();
+
+        $this->assertSame(Status::Up, $health->status);
+        $this->assertSame(['queues' => ['custom' => ['default' => ['size' => 6]]]], $health->details);
+    }
+
     /**
      * @return array<string, array{mixed}>
      */
