@@ -214,6 +214,11 @@ final class SchedulerStore
         }
 
         self::$logged[$kind] = true;
-        Log::warning($message, $exception === null ? [] : ['exception' => $exception]);
+
+        try {
+            Log::warning($message, $exception === null ? [] : ['exception' => $exception]);
+        } catch (Throwable) {
+            // A logger that fails, such as on a full disk, must not fail the task or the endpoint either.
+        }
     }
 }

@@ -447,6 +447,39 @@ final class ScheduledTaskRecordingTest extends TestCase
     }
 
     #[Test]
+    public function a_logger_that_throws_never_breaks_a_task_or_the_endpoint(): void
+    {
+        $this->useStore(new class extends ArrayStore
+        {
+            public function put($key, $value, $seconds): bool
+            {
+                throw new RuntimeException('Connection refused');
+            }
+
+            public function forever($key, $value): bool
+            {
+                throw new RuntimeException('Connection refused');
+            }
+
+            public function many(array $keys): array
+            {
+                throw new RuntimeException('Connection refused');
+            }
+        });
+        Log::shouldReceive('warning')->andThrow(new RuntimeException('No space left on device'));
+        $ran = false;
+        $this->schedule->call(function () use (&$ran): void {
+            $ran = true;
+        })->everyMinute()->description('Prune');
+
+        $this->startCommand('schedule:run');
+        $this->artisan('schedule:run')->assertExitCode(0);
+
+        $this->assertTrue($ran);
+        $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
+    }
+
+    #[Test]
     public function a_store_that_rejects_a_write_never_breaks_a_task(): void
     {
         $this->useStore(new class extends ArrayStore
