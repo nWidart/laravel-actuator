@@ -39,9 +39,8 @@ final class WatchedQueues
         if ($queues === []) {
             $connection = $config->get('queue.default');
             $connection = is_string($connection) ? $connection : 'sync';
-            $queue = $config->get("queue.connections.{$connection}.queue");
 
-            return [$connection => [is_string($queue) && $queue !== '' ? $queue : 'default']];
+            return [$connection => [self::defaultQueue($config, $connection)]];
         }
 
         $watched = [];
@@ -56,6 +55,22 @@ final class WatchedQueues
         }
 
         return $watched;
+    }
+
+    /**
+     * The queue a connection uses when none is named. A failover connection has no "queue": it
+     * sends the name to its first connection, so that connection's "queue" is the one it reads.
+     */
+    private static function defaultQueue(Repository $config, string $connection): string
+    {
+        $queue = $config->get("queue.connections.{$connection}.queue");
+
+        if ($queue === null && $config->get("queue.connections.{$connection}.driver") === 'failover') {
+            $first = $config->get("queue.connections.{$connection}.connections.0");
+            $queue = is_string($first) ? $config->get("queue.connections.{$first}.queue") : null;
+        }
+
+        return is_string($queue) && $queue !== '' ? $queue : 'default';
     }
 
     /**

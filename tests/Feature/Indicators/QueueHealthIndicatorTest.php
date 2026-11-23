@@ -327,6 +327,29 @@ final class QueueHealthIndicatorTest extends TestCase
     }
 
     #[Test]
+    public function a_failover_connection_watches_the_default_queue_of_its_first_connection(): void
+    {
+        config()->set('queue.default', 'failover');
+        config()->set('queue.connections.failover', ['driver' => 'failover', 'connections' => ['redis', 'database']]);
+        config()->set('queue.connections.redis.queue', 'high');
+
+        $health = $this->indicator([], ['failover' => $this->sized(['high' => 7])])->health();
+
+        $this->assertSame(['queues' => ['failover' => ['high' => ['size' => 7]]]], $health->details);
+    }
+
+    #[Test]
+    public function a_failover_connection_without_a_queue_on_its_first_connection_watches_the_default_one(): void
+    {
+        config()->set('queue.default', 'failover');
+        config()->set('queue.connections.failover', ['driver' => 'failover', 'connections' => ['custom']]);
+
+        $health = $this->indicator([], ['failover' => $this->sized(['default' => 0])])->health();
+
+        $this->assertSame(['queues' => ['failover' => ['default' => ['size' => 0]]]], $health->details);
+    }
+
+    #[Test]
     public function it_counts_the_jobs_of_the_database_driver(): void
     {
         Schema::create('jobs', function (Blueprint $table): void {
