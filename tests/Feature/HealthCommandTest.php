@@ -185,4 +185,18 @@ final class HealthCommandTest extends TestCase
 
         $this->assertSame(3, CountingHealthIndicator::$runs);
     }
+
+    #[Test]
+    public function it_leaves_the_cache_untouched(): void
+    {
+        config()->set('actuator.health.show_details', 'always');
+        config()->set('actuator.health.indicators', ['counting' => CountingHealthIndicator::class]);
+        config()->set('actuator.health.groups', []);
+        config()->set('actuator.health.cache', ['ttl' => 60, 'store' => 'array']);
+        Cache::store('array')->flush();
+
+        $this->artisan('actuator:health')->assertExitCode(0);
+
+        $this->getJson('/actuator/health')->assertJsonPath('components.counting.details.run', 2);
+    }
 }
