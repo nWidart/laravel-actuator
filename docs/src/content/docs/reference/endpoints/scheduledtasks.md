@@ -67,9 +67,9 @@ Spring Boot's (3.4 and later):
 | `ERROR`   | The task threw an exception, or a command exited with another code. For a command that exits with another code, the exception is `Exception` with the message `Scheduled command [<name>] failed with exit code [<code>]`. `<name>` is the command without its arguments, such as `report:send`. |
 
 A task that the scheduler skips, for example because its `when()` filter fails or it overlaps another run, keeps its last
-execution. One case differs on Laravel 12: when another process takes the `withoutOverlapping()` lock
-just after the scheduler checked it, the skipped run is recorded as `SUCCESS`. Laravel 13 marks such
-a run as skipped, so it keeps the last execution. A record expires after 7 days without a run, so a removed task leaves no record behind.
+execution. One case differs: when another process takes the `withoutOverlapping()` lock just after
+the scheduler checked it, the skipped run is recorded as `STARTED` on Laravel 13, and as `SUCCESS`
+on Laravel 12. Recording never checks the lock itself, so it never changes whether a task runs. A record expires after 7 days without a run, so a removed task leaves no record behind.
 
 The scheduler and the web instances must share the store. Set it with
 [`scheduler.store`](/laravel-actuator/reference/configuration/#scheduler). The `file` and `array`

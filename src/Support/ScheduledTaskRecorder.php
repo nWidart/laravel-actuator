@@ -12,11 +12,11 @@ use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Console\Scheduling\CallbackEvent;
 use Illuminate\Console\Scheduling\Event;
-use Throwable;
 
 /**
  * Records the last execution of each scheduled task, and each tick of "schedule:run", in the
- * SchedulerStore. A skipped task keeps its last execution.
+ * SchedulerStore. A skipped task keeps its last execution. Each listener returns at once when
+ * recording is off, and none touches the task's mutex: recording never changes whether a task runs.
  *
  * @internal
  */
@@ -41,24 +41,20 @@ final class ScheduledTaskRecorder
      */
     public function tick(CommandStarting $event): void
     {
-        if ($event->command === 'schedule:run') {
+        if ($event->command === 'schedule:run' && SchedulerStore::recording()) {
             SchedulerStore::recordTick();
         }
     }
 
     /**
      * The withoutOverlapping() filter of "schedule:run" skips a task whose mutex exists. Another
-     * process can still take the mutex after that filter: the run is then skipped after this
-     * event, and must not overwrite the last execution. The mutex of a run that goes ahead is
-     * only created after this event, by Event::run().
-     *
-     * The check is best-effort, like Laravel's own filter, which calls the same exists(): it is
-     * not atomic with the mutex->create() in Event::run(), so it narrows the window but does not
-     * close it. A second server can still leave STARTED for a run that never happens.
+     * process can still take the mutex after that filter: Event::run() then skips the run after
+     * this event, which has recorded STARTED. The mutex is not checked here: on a store with locks,
+     * EventMutex::exists() briefly takes the lock, and could make another process skip a real run.
      */
     public function starting(ScheduledTaskStarting $event): void
     {
-        if (! self::overlaps($event->task)) {
+        if (SchedulerStore::recording()) {
             SchedulerStore::recordExecution($event->task, SchedulerStore::STARTED);
         }
     }
@@ -66,11 +62,15 @@ final class ScheduledTaskRecorder
     /**
      * A background task is only launched here: ScheduledBackgroundTaskFinished reports its end.
      * A foreground command that exits non-zero is followed by ScheduledTaskFailed. A run skipped
-     * because it overlaps another never happened. Laravel 12 has no skippedBecauseOverlapping:
-     * such a run, skipped after ScheduledTaskStarting, is recorded as SUCCESS there.
+     * because it overlaps another never happened: it stays STARTED. Laravel 12 has no
+     * skippedBecauseOverlapping: such a run is recorded as SUCCESS there.
      */
     public function finished(ScheduledTaskFinished $event): void
     {
+        if (! SchedulerStore::recording()) {
+            return;
+        }
+
         $task = $event->task;
         // Read by name, so static analysis passes on Laravel 12 and 13 alike.
         $skipped = (get_object_vars($task)['skippedBecauseOverlapping'] ?? false) === true;
@@ -87,6 +87,10 @@ final class ScheduledTaskRecorder
      */
     public function failed(ScheduledTaskFailed $event): void
     {
+        if (! SchedulerStore::recording()) {
+            return;
+        }
+
         $task = $event->task;
         $exception = $event->exception;
 
@@ -104,6 +108,10 @@ final class ScheduledTaskRecorder
 
     public function backgroundFinished(ScheduledBackgroundTaskFinished $event): void
     {
+        if (! SchedulerStore::recording()) {
+            return;
+        }
+
         $task = $event->task;
 
         if ($task->exitCode === 0) {
@@ -127,18 +135,5 @@ final class ScheduledTaskRecorder
             'type' => Exception::class,
             'message' => 'Scheduled command ['.ScheduledTaskTarget::name($task)."] failed with exit code [{$task->exitCode}].",
         ];
-    }
-
-    /**
-     * Whether another run of the task holds its mutex. A mutex that cannot be read counts as free:
-     * recording must never fail the task.
-     */
-    private static function overlaps(Event $task): bool
-    {
-        try {
-            return $task->withoutOverlapping && $task->mutex->exists($task);
-        } catch (Throwable) {
-            return false;
-        }
     }
 }

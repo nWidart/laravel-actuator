@@ -159,7 +159,7 @@ final class ScheduledTaskRecordingTest extends TestCase
     }
 
     #[Test]
-    public function an_overlapped_run_keeps_the_last_execution(): void
+    public function a_run_skipped_for_overlap_after_it_started_stays_started(): void
     {
         if (! property_exists(SchedulingEvent::class, 'skippedBecauseOverlapping')) {
             $this->markTestSkipped('Laravel 12 does not mark a run skipped after ScheduledTaskStarting: it is recorded as SUCCESS.');
@@ -169,26 +169,56 @@ final class ScheduledTaskRecordingTest extends TestCase
         $task = $this->schedule->call(function () use (&$ran): void {
             $ran = true;
         })->everyMinute()->description('Prune')->withoutOverlapping();
-        $task->mutex = $this->mutexTakenAfterTheFilters();
+        $task->mutex = $this->mutex(takenAfterTheFilters: true);
 
         $this->artisan('schedule:run');
 
         $this->assertFalse($ran);
-        $this->assertSame([], $this->lastExecution('Prune'));
+        $this->assertSame(['time' => '2026-01-01T10:30:00+00:00', 'status' => 'STARTED'], $this->lastExecution('Prune'));
     }
 
     #[Test]
-    public function an_overlapped_run_of_a_background_task_keeps_its_start(): void
+    public function recording_never_touches_the_task_mutex(): void
     {
-        $task = $this->schedule->exec('sleep 60')->everyMinute()->runInBackground()->withoutOverlapping();
-        event(new ScheduledTaskStarting($task));
+        $task = $this->schedule->exec('exit 0')->everyMinute()->withoutOverlapping();
+        $task->mutex = $mutex = $this->mutex(takenAfterTheFilters: false);
 
-        // The run that started at 10:30 still holds the mutex when the run of 10:31 starts.
-        $task->mutex = $this->mutexTakenAfterTheFilters();
-        Carbon::setTestNow('2026-01-01 10:31:00 UTC');
         $this->artisan('schedule:run');
 
-        $this->assertSame(['time' => '2026-01-01T10:30:00+00:00', 'status' => 'STARTED'], $this->lastExecution('sleep 60'));
+        // Only Laravel's own calls: the withoutOverlapping() filter, then the run.
+        $this->assertSame(['exists' => 1, 'create' => 1], $mutex->calls);
+        $this->assertSame('SUCCESS', $this->lastExecution('exit 0')['status'] ?? null);
+    }
+
+    #[Test]
+    public function with_recording_off_the_listeners_touch_neither_the_mutex_nor_the_store(): void
+    {
+        config()->set('actuator.scheduler.record', false);
+        $this->useStore(new class extends ArrayStore
+        {
+            public function get($key): mixed
+            {
+                throw new RuntimeException('The store was used.');
+            }
+
+            public function put($key, $value, $seconds): bool
+            {
+                throw new RuntimeException('The store was used.');
+            }
+
+            public function forever($key, $value): bool
+            {
+                throw new RuntimeException('The store was used.');
+            }
+        });
+        $task = $this->schedule->call(fn () => throw new RuntimeException('Mail server down'))->everyMinute()->description('Send')->withoutOverlapping();
+        $task->mutex = $mutex = $this->mutex(takenAfterTheFilters: false);
+
+        $this->startCommand('schedule:run');
+        $this->artisan('schedule:run');
+
+        $this->assertSame(['exists' => 1, 'create' => 1], $mutex->calls);
+        Log::shouldNotHaveReceived('warning');
     }
 
     #[Test]
@@ -444,26 +474,33 @@ final class ScheduledTaskRecordingTest extends TestCase
     }
 
     /**
-     * A mutex that another process takes between the withoutOverlapping() filter of
-     * "schedule:run" and the run itself, so the run is skipped after ScheduledTaskStarting.
+     * A task mutex that counts Laravel's calls. It is free for the withoutOverlapping() filter of
+     * "schedule:run". With $takenAfterTheFilters, another process takes it before the run, which
+     * is then skipped after ScheduledTaskStarting.
+     *
+     * @return EventMutex&object{calls: array{exists: int, create: int}}
      */
-    private function mutexTakenAfterTheFilters(): EventMutex
+    private function mutex(bool $takenAfterTheFilters): EventMutex
     {
-        return new class implements EventMutex
+        return new class($takenAfterTheFilters) implements EventMutex
         {
-            private bool $checked = false;
+            /** @var array{exists: int, create: int} */
+            public array $calls = ['exists' => 0, 'create' => 0];
+
+            public function __construct(private readonly bool $taken) {}
 
             public function create(SchedulingEvent $event): bool
             {
-                return false;
+                $this->calls['create']++;
+
+                return ! $this->taken;
             }
 
             public function exists(SchedulingEvent $event): bool
             {
-                $exists = $this->checked;
-                $this->checked = true;
+                $this->calls['exists']++;
 
-                return $exists;
+                return false;
             }
 
             public function forget(SchedulingEvent $event): void {}
