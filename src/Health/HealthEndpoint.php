@@ -34,13 +34,14 @@ final readonly class HealthEndpoint
         /** @var array<string, string|array{0: class-string, 1?: array<string, mixed>}> $indicators */
         $indicators = $this->config->get('actuator.health.indicators', []);
 
-        $group = $this->group($path);
+        $groupName = $this->groupName($path);
+        $group = $groupName === null ? null : $groups[$groupName];
         if ($group !== null) {
             array_shift($path);
         }
 
         $members = $group === null ? array_keys($indicators) : $this->members($group['include'] ?? [], $indicators);
-        $order = $this->order($group ?? []);
+        $order = $this->order($groupName);
 
         $showDetails = $this->visibility($group ?? [], 'show_details')?->isGranted() ?? false;
         $showComponents = $this->visibility($group ?? [], 'show_components')?->isGranted() ?? $showDetails;
@@ -79,25 +80,20 @@ final readonly class HealthEndpoint
      */
     public function httpStatus(array $path, Status $status): int
     {
-        return $this->httpMapping($this->group($path) ?? [])[$status->value] ?? $status->httpStatus();
+        return $this->httpMapping($this->groupName($path))[$status->value] ?? $status->httpStatus();
     }
 
     /**
-     * The group a path starts with, or null for the endpoint itself.
+     * The name of the group a path starts with, or null for the endpoint itself.
      *
      * @param  list<string>  $path
-     * @return GroupConfig|null
      */
-    private function group(array $path): ?array
+    private function groupName(array $path): ?string
     {
-        if ($path === []) {
-            return null;
-        }
-
         /** @var array<string, GroupConfig> $groups */
         $groups = $this->config->get('actuator.health.groups', []);
 
-        return $groups[$path[0]] ?? null;
+        return $path !== [] && isset($groups[$path[0]]) ? $path[0] : null;
     }
 
     /**
@@ -129,62 +125,76 @@ final readonly class HealthEndpoint
     }
 
     /**
-     * The severity order, most severe first. A group's "status.order" wins over the endpoint's.
+     * The severity order, most severe first.
      *
-     * @param  array{status?: array<string, mixed>}  $group
      * @return list<Status>
      */
-    private function order(array $group): array
+    private function order(?string $groupName): array
     {
-        $order = $this->statusSetting($group, 'order') ?? [];
+        [$key, $order] = $this->statusSetting($groupName, 'order');
+        $order ??= [];
 
         if (! is_array($order) || ! array_is_list($order)) {
-            throw new InvalidArgumentException('Health status order must be a list of status codes.');
+            throw new InvalidArgumentException("Health status setting [{$key}] must be a list of status codes.");
         }
 
-        return array_map(fn (mixed $code): Status => $this->status($code, 'order'), $order);
+        return array_map(fn (mixed $code): Status => $this->status($code, $key), $order);
     }
 
     /**
-     * @param  array{status?: array<string, mixed>}  $group
+     * The HTTP status code of each mapped status, keyed by status code.
+     *
      * @return array<string, int>
      */
-    private function httpMapping(array $group): array
+    private function httpMapping(?string $groupName): array
     {
-        $mapping = $this->statusSetting($group, 'http_mapping') ?? [];
+        [$key, $mapping] = $this->statusSetting($groupName, 'http_mapping');
+        $mapping ??= [];
 
         if (! is_array($mapping)) {
-            throw new InvalidArgumentException('Health status HTTP mapping must map status codes to HTTP status codes.');
+            throw new InvalidArgumentException("Health status setting [{$key}] must map status codes to HTTP status codes.");
         }
 
+        $codes = [];
         foreach ($mapping as $code => $httpStatus) {
-            $this->status($code, 'HTTP mapping');
+            $status = $this->status($code, $key);
 
-            if (! is_int($httpStatus)) {
-                throw new InvalidArgumentException("Health status HTTP mapping for [{$code}] must be an integer HTTP status code.");
+            if (! is_int($httpStatus) || $httpStatus < 100 || $httpStatus > 599) {
+                throw new InvalidArgumentException("Health status setting [{$key}] must map [{$status->value}] to an integer HTTP status code from 100 to 599.");
             }
+
+            $codes[$status->value] = $httpStatus;
         }
 
-        /** @var array<string, int> $mapping */
-        return $mapping;
+        return $codes;
     }
 
     /**
-     * A group's "status" setting wins over the endpoint's "status" setting. Null when neither is set.
+     * A key of the group's "status" setting wins over the same key of the endpoint's "status" setting.
+     * Returns the config key the value comes from, for error messages, and the value, null when unset.
      *
-     * @param  array{status?: array<string, mixed>}  $group
+     * @return array{0: string, 1: mixed}
      */
-    private function statusSetting(array $group, string $key): mixed
+    private function statusSetting(?string $groupName, string $key): array
     {
-        return $group['status'][$key] ?? $this->config->get("actuator.health.status.{$key}");
+        /** @var array<string, GroupConfig> $groups */
+        $groups = $this->config->get('actuator.health.groups', []);
+        $value = $groupName === null ? null : $groups[$groupName]['status'][$key] ?? null;
+
+        return $value !== null
+            ? ["actuator.health.groups.{$groupName}.status.{$key}", $value]
+            : ["actuator.health.status.{$key}", $this->config->get("actuator.health.status.{$key}")];
     }
 
-    private function status(mixed $code, string $setting): Status
+    /**
+     * A status code, in any case.
+     */
+    private function status(mixed $code, string $key): Status
     {
-        $status = is_string($code) ? Status::tryFrom($code) : null;
+        $status = is_string($code) ? Status::tryFrom(strtoupper($code)) : null;
 
         return $status ?? throw new InvalidArgumentException(
-            "Health status {$setting} contains unknown status [".(is_scalar($code) ? $code : get_debug_type($code)).'].'
+            "Health status setting [{$key}] contains unknown status [".(is_scalar($code) ? $code : get_debug_type($code)).'].'
         );
     }
 

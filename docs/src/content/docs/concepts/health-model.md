@@ -74,9 +74,15 @@ and the exception message goes into the `error` detail. The other indicators sti
 check must never break the health endpoint itself, because a health endpoint that returns HTTP 500
 tells a checker nothing about which part failed.
 
-Configuration errors are different. A group that includes an unknown indicator, a class that is
-not an indicator, or an unknown status in `health.status`, is a mistake by the developer, not a runtime failure. These throw, so that the
-mistake is visible at the first request instead of hiding as a permanent `DOWN`.
+Configuration errors are different. These are mistakes by the developer, not runtime failures:
+
+- A group that includes an unknown indicator.
+- A class that is not an indicator.
+- In the `status` settings of the endpoint or of a group: an unknown status code, an `order` that is
+  not a list, or an `http_mapping` code that is not an integer from 100 to 599.
+
+These throw, so that the mistake is visible at the first request instead of hiding as a permanent
+`DOWN`.
 
 ## Visibility: status, components, details
 

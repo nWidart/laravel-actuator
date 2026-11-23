@@ -157,8 +157,9 @@ How statuses aggregate and which HTTP status code each one returns.
 | `order`        | list of status codes | Severity order, most severe first. A status missing from the list sorts after the listed ones, in default order. |
 | `http_mapping` | map of status to int | HTTP status code for each status. An unmapped status keeps its default: 503 for `DOWN` and `OUT_OF_SERVICE`, 200 otherwise. |
 
-Both keys are commented out by default. An unknown status code, or an HTTP status code that is not
-an integer, throws `InvalidArgumentException` on the next request.
+Both keys are commented out by default. Status codes are case-insensitive. An unknown status code,
+or an HTTP status code that is not an integer from 100 to 599, throws `InvalidArgumentException` on
+the next request. The message names the config key.
 
 ### `health.groups`
 

@@ -257,16 +257,53 @@ final class HealthEndpointTest extends TestCase
         $this->getJson('/actuator/health/warn/fixed')->assertStatus(429);
     }
 
+    #[Test]
+    public function a_group_inherits_the_status_keys_it_does_not_set(): void
+    {
+        config()->set('actuator.health.status', ['order' => ['UP'], 'http_mapping' => ['DOWN' => 500]]);
+        config()->set('actuator.health.indicators.fixed', [FixedHealthIndicator::class, ['status' => 'DOWN']]);
+        config()->set('actuator.health.groups.ordered', ['include' => ['ping', 'fixed'], 'status' => ['order' => ['DOWN']]]);
+        config()->set('actuator.health.groups.mapped', ['include' => ['ping', 'fixed'], 'status' => ['http_mapping' => ['UP' => 299]]]);
+
+        // The group sets "order" and inherits the endpoint's "http_mapping".
+        $this->getJson('/actuator/health/ordered')->assertStatus(500)->assertExactJson(['status' => 'DOWN']);
+        // The group sets "http_mapping" and inherits the endpoint's "order".
+        $this->getJson('/actuator/health/mapped')->assertStatus(299)->assertExactJson(['status' => 'UP']);
+    }
+
+    #[Test]
+    public function a_group_http_mapping_replaces_the_endpoint_mapping(): void
+    {
+        config()->set('actuator.health.status.http_mapping', ['DOWN' => 500]);
+        config()->set('actuator.health.indicators.fixed', [FixedHealthIndicator::class, ['status' => 'DOWN']]);
+        config()->set('actuator.health.groups.warn', ['include' => ['fixed'], 'status' => ['http_mapping' => ['WARNING' => 429]]]);
+
+        $this->getJson('/actuator/health')->assertStatus(500);
+        // The endpoint's DOWN => 500 is not merged in: DOWN keeps its default code.
+        $this->getJson('/actuator/health/warn')->assertStatus(503)->assertExactJson(['status' => 'DOWN']);
+    }
+
+    #[Test]
+    public function it_accepts_status_codes_in_any_case(): void
+    {
+        config()->set('actuator.health.status', ['order' => ['up', 'Warning'], 'http_mapping' => ['up' => 299]]);
+        config()->set('actuator.health.indicators.fixed', [FixedHealthIndicator::class, ['status' => 'WARNING']]);
+
+        $this->getJson('/actuator/health')->assertStatus(299)->assertJsonPath('status', 'UP');
+    }
+
     /**
      * @return iterable<string, array{0: string, 1: mixed, 2: string}>
      */
     public static function invalidStatusConfig(): iterable
     {
-        yield 'unknown status in order' => ['order', ['DOWN', 'DEGRADED'], 'Health status order contains unknown status [DEGRADED].'];
-        yield 'order not a list' => ['order', 'DOWN', 'Health status order must be a list of status codes.'];
-        yield 'unknown status in mapping' => ['http_mapping', ['DEGRADED' => 200], 'Health status HTTP mapping contains unknown status [DEGRADED].'];
-        yield 'non-int HTTP code' => ['http_mapping', ['WARNING' => '207'], 'Health status HTTP mapping for [WARNING] must be an integer HTTP status code.'];
-        yield 'mapping not an array' => ['http_mapping', 207, 'Health status HTTP mapping must map status codes to HTTP status codes.'];
+        yield 'unknown status in order' => ['order', ['DOWN', 'DEGRADED'], 'Health status setting [actuator.health.status.order] contains unknown status [DEGRADED].'];
+        yield 'order not a list' => ['order', 'DOWN', 'Health status setting [actuator.health.status.order] must be a list of status codes.'];
+        yield 'unknown status in mapping' => ['http_mapping', ['DEGRADED' => 200], 'Health status setting [actuator.health.status.http_mapping] contains unknown status [DEGRADED].'];
+        yield 'non-int HTTP code' => ['http_mapping', ['WARNING' => '207'], 'Health status setting [actuator.health.status.http_mapping] must map [WARNING] to an integer HTTP status code from 100 to 599.'];
+        yield 'HTTP code above 599' => ['http_mapping', ['DOWN' => 5000], 'Health status setting [actuator.health.status.http_mapping] must map [DOWN] to an integer HTTP status code from 100 to 599.'];
+        yield 'HTTP code below 100' => ['http_mapping', ['DOWN' => 99], 'Health status setting [actuator.health.status.http_mapping] must map [DOWN] to an integer HTTP status code from 100 to 599.'];
+        yield 'mapping not an array' => ['http_mapping', 207, 'Health status setting [actuator.health.status.http_mapping] must map status codes to HTTP status codes.'];
     }
 
     #[Test]
@@ -289,7 +326,7 @@ final class HealthEndpointTest extends TestCase
 
         $this->withoutExceptionHandling();
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Health status order contains unknown status [NOPE].');
+        $this->expectExceptionMessage('Health status setting [actuator.health.groups.liveness.status.order] contains unknown status [NOPE].');
 
         $this->getJson('/actuator/health/liveness');
     }
