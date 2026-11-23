@@ -26,6 +26,8 @@ Keys you do not publish keep their default values.
 | `health.status.order`            | list of status codes    | `DOWN`, `OUT_OF_SERVICE`, `WARNING`, `UP`, `UNKNOWN` |                    |
 | `health.status.http_mapping`     | map of status to int    | `[]`                                     |                                |
 | `health.groups`                  | map of groups           | `liveness`, `readiness`                  |                                |
+| `health.cache.ttl`               | int (seconds)           | `0`                                      | `ACTUATOR_HEALTH_CACHE_TTL`    |
+| `health.cache.store`             | string                  | `'file'`                                 | `ACTUATOR_HEALTH_CACHE_STORE`  |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
 | `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
@@ -100,6 +102,7 @@ Unknown IDs are ignored. The discovery endpoint is always registered.
     'indicators' => [/* ... */],
     'status' => [/* ... */],
     'groups' => [/* ... */],
+    'cache' => [/* ... */],
 ],
 ```
 
@@ -186,6 +189,46 @@ Map of group name to group settings.
 
 An unknown name in `include` throws `InvalidArgumentException` when the group is requested.
 
+### `health.cache`
+
+Reuse each indicator's result for a few seconds, so that frequent probes do not run every check.
+This is Spring Boot's `management.endpoint.health.cache.time-to-live`.
+
+```php
+'cache' => [
+    'ttl' => env('ACTUATOR_HEALTH_CACHE_TTL', 0),
+    'store' => env('ACTUATOR_HEALTH_CACHE_STORE', 'file'),
+],
+```
+
+| Key     | Type          | Description                                                                         |
+| ------- | ------------- | ----------------------------------------------------------------------------------- |
+| `ttl`   | int (seconds) | How long a result is reused. `0`, the default, turns the cache off. A value that is not a whole number of seconds, 0 or more, throws `InvalidArgumentException`. |
+| `store` | string        | The Laravel cache store that keeps the results. It must be local to the instance.   |
+
+Results are kept per indicator name and definition: the whole endpoint, its groups and its
+components share one entry, and a changed class or constructor argument is a new entry. The
+`duration` detail of a cached result is the duration of the run that produced it.
+
+The store must never be shared between instances. A result from a shared store, such as `redis` or
+`database`, is the result of whichever instance ran the indicator last, so one instance's failure
+hides behind another's success. Pick the store for your runtime:
+
+| Runtime                                   | Store   |
+| ----------------------------------------- | ------- |
+| PHP-FPM, with the APCu extension          | `apc`   |
+| Storage local to the container or server  | `file`  |
+| Octane (one cache per worker)             | `array` |
+
+Do not use `array` under PHP-FPM: it lives for one request, so nothing is reused. Do not use `file`
+when several servers share the `storage` directory.
+
+A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
+and a warning is logged. A published file without a `cache` key keeps the cache off.
+
+Keep the TTL short, 2 to 5 seconds. A longer one keeps a stale `DOWN` and holds the instance out
+of traffic after it recovered. See [Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/#cache-the-results).
+
 ## `info`
 
 ```php
@@ -262,7 +305,9 @@ The middleware added after the shared `middleware` on the
 ```
 
 These keys apply only to the meters you create with
-[`MeterRegistry`](/laravel-actuator/reference/php-api/#meterregistry). The built-in metrics are
+[`MeterRegistry`](/laravel-actuator/reference/php-api/#meterregistry), and to
+[`laravel.health.indicator.duration`](/laravel-actuator/reference/metrics/#recorded-by-laravel-actuator),
+which Laravel Actuator records through it. The other built-in metrics are
 switched in `instrumentation` of `config/metrics.php`. See the
 [built-in metrics](/laravel-actuator/reference/metrics/).
 

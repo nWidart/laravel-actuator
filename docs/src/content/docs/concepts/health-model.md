@@ -112,10 +112,30 @@ wrong?". One aggregated status cannot answer all three.
 See [liveness and readiness](/laravel-actuator/concepts/liveness-and-readiness/) for the two groups
 the package defines.
 
-## No caching
+## Duration
 
-Each request runs every indicator of the requested path. The response always reflects the current
-state, which is what probes expect. The cost is a database query and a cache round trip for each
-request. For a check that is slow or expensive, compute the result in a scheduled job and let the
-indicator read it, as described in
+Each indicator run is timed. With details shown, each component has a `duration` detail, an
+ISO-8601 duration with millisecond precision, such as `"PT0.012S"`. The same value goes into the
+[`laravel.health.indicator.duration`](/laravel-actuator/reference/metrics/#recorded-by-laravel-actuator)
+histogram, so you can see which check makes probes slow.
+
+## Caching
+
+By default, each request runs every indicator of the requested path, so the response reflects the
+current state. Probes, load balancers and monitors call it every few seconds, on every instance.
+PHP runs the indicators one after another and cannot interrupt a blocked call: one slow database
+makes every probe slow, and the probes pile up on the PHP-FPM workers.
+
+[`health.cache.ttl`](/laravel-actuator/reference/configuration/#healthcache) reuses each indicator's
+result for a few seconds. The cache is per indicator, so the endpoint, its groups and its components
+share one run. A cached result keeps the `duration` of the run that produced it, and is not recorded
+in the histogram again.
+
+The cache must be local to each instance. A health check asks "does this instance work?". A result
+shared between instances answers for whichever instance ran the check last, and hides one
+instance's failure behind another's success.
+
+Keep the TTL short, 2 to 5 seconds: it bounds how long a recovered instance still reports `DOWN`.
+For a check that is slow or expensive, compute the result in a scheduled job and let the indicator
+read it, as described in
 [write a custom health indicator](/laravel-actuator/guides/write-a-health-indicator/#keep-the-check-fast).

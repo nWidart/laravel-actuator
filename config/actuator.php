@@ -108,6 +108,18 @@ return [
             'liveness' => ['include' => ['ping']],
             'readiness' => ['include' => ['readinessState', 'migrations']],
         ],
+
+        // Reuse each indicator's result for "ttl" seconds (0 turns the
+        // cache off), so frequent probes do not run every check. 2 to 5
+        // seconds is enough. The store must be local to the instance:
+        // "apc" under PHP-FPM, "file" when storage is local to the
+        // container, "array" under Octane. A shared store, such as redis
+        // or database, would hide one instance's failure behind another's
+        // success.
+        'cache' => [
+            'ttl' => env('ACTUATOR_HEALTH_CACHE_TTL', 0),
+            'store' => env('ACTUATOR_HEALTH_CACHE_STORE', 'file'),
+        ],
     ],
 
     /*

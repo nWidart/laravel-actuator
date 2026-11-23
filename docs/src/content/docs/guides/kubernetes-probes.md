@@ -65,6 +65,23 @@ Keep `liveness` minimal. A liveness failure restarts the container, which does n
 outage. [Liveness and readiness](/laravel-actuator/concepts/liveness-and-readiness/) explains the
 trade-offs.
 
+## Cache the results
+
+The kubelet probes every pod every few seconds, and other checkers may too. When an indicator is
+slow, every probe waits for it. Reuse each result for a few seconds, in a store local to the pod:
+
+```ini title=".env"
+ACTUATOR_HEALTH_CACHE_TTL=3
+ACTUATOR_HEALTH_CACHE_STORE=file
+```
+
+Use `file` when `storage` is local to the container, `apc` when PHP-FPM has the APCu extension, or
+`array` under Octane. Never use a store shared between pods, such as `redis`: one pod would report
+the health of another.
+
+Keep the TTL below the probe's `periodSeconds`. A longer TTL keeps a stale `DOWN` and holds a
+recovered pod out of the Service.
+
 ## Take pods out of rotation with maintenance mode
 
 While the application is in maintenance mode, `readiness` reports `OUT_OF_SERVICE` and `liveness`

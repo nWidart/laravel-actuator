@@ -78,7 +78,7 @@ You do not need to catch exceptions. When `health()` throws, the component repor
 exception class and message in the `error` detail, and the package logs a warning:
 
 ```json
-{ "status": "DOWN", "details": { "error": "RuntimeException: Connection refused" } }
+{ "status": "DOWN", "details": { "error": "RuntimeException: Connection refused", "duration": "PT0.002S" } }
 ```
 
 The same happens when the container cannot build the indicator, for example when the class does
@@ -108,12 +108,15 @@ public function __construct(private PaymentGateway $gateway, private int $maxLat
 
 ## Keep the check fast
 
-Every health request runs every indicator, and probes call the endpoint every few seconds.
+Every health request runs every indicator, and probes call the endpoint every few seconds. The
+`duration` detail and the `laravel.health.indicator.duration` histogram show how long each one takes.
 
 - Set a short timeout on network calls, well below your probe timeout.
 - Avoid heavy queries. Count rows with an index, or read a cached value.
 - If a check is expensive, compute it in a scheduled job, store the result in the cache, and let the
   indicator read the cache.
+- Set a short [health cache](/laravel-actuator/reference/configuration/#healthcache), 2 to 5
+  seconds, so frequent probes share one run.
 
 ## See also
 

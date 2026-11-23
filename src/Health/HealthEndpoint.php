@@ -4,30 +4,45 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Health;
 
+use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Actuator\Visibility;
 use Throwable;
 
 /**
  * Evaluates health indicators for the whole application, a group, or a single component.
  *
+ * With "health.cache.ttl" above 0, each indicator's result is kept in a cache store local to the
+ * instance for that many seconds, keyed by indicator name and definition, so the endpoint, its
+ * groups and its components share one run.
+ *
  * @phpstan-type GroupConfig array{include?: list<string>, show_details?: string|null, show_components?: string|null, status?: array<string, mixed>}
  */
 final readonly class HealthEndpoint
 {
-    public function __construct(private Container $container, private Repository $config) {}
+    /** The histogram of how long each indicator takes to run, in seconds. */
+    public const DURATION_METER = 'laravel.health.indicator.duration';
+
+    public function __construct(
+        private Container $container,
+        private Repository $config,
+        private CacheFactory $cache,
+        private MeterRegistry $registry,
+    ) {}
 
     /**
      * Resolve the health for a path: [], [component], [group] or [group, component].
-     * Returns null when the path does not exist or its components are hidden.
+     * Returns null when the path does not exist or its components are hidden. Pass $cache false to
+     * run every indicator now, ignoring and leaving untouched the cached results.
      *
      * @param  list<string>  $path
      * @return array{status: Status, details?: array<string, mixed>, components?: array<string, mixed>, groups?: list<string>}|null
      */
-    public function health(array $path = []): ?array
+    public function health(array $path = [], bool $cache = true): ?array
     {
         /** @var array<string, GroupConfig> $groups */
         $groups = $this->config->get('actuator.health.groups', []);
@@ -45,18 +60,19 @@ final readonly class HealthEndpoint
 
         $showDetails = $this->visibility($group ?? [], 'show_details')?->isGranted() ?? false;
         $showComponents = $this->visibility($group ?? [], 'show_components')?->isGranted() ?? $showDetails;
+        $ttl = $cache ? $this->ttl() : 0;
 
         if ($path !== []) {
             if (! $showComponents || count($path) > 1 || ! in_array($path[0], $members, true)) {
                 return null;
             }
 
-            return $this->evaluate($path[0], $indicators[$path[0]], $showDetails);
+            return $this->evaluate($path[0], $indicators[$path[0]], $showDetails, $ttl);
         }
 
         $components = [];
         foreach ($members as $name) {
-            $components[$name] = $this->evaluate($name, $indicators[$name], $showDetails);
+            $components[$name] = $this->evaluate($name, $indicators[$name], $showDetails, $ttl);
         }
 
         $health = ['status' => Status::aggregate(array_column($components, 'status'), $order)];
@@ -217,17 +233,113 @@ final readonly class HealthEndpoint
      * @param  string|array{0: class-string, 1?: array<string, mixed>}  $definition
      * @return array{status: Status, details?: array<string, mixed>}
      */
-    private function evaluate(string $name, string|array $definition, bool $showDetails): array
+    private function evaluate(string $name, string|array $definition, bool $showDetails, int $ttl): array
     {
-        $health = $this->check($name, $definition);
+        [$health, $seconds] = $ttl > 0 ? $this->cached($name, $definition, $ttl) : $this->run($name, $definition);
 
         $result = ['status' => $health->status];
 
-        if ($showDetails && $health->details !== []) {
-            $result['details'] = $health->details;
+        if ($showDetails) {
+            $result['details'] = [...$health->details, 'duration' => self::duration($seconds)];
         }
 
         return $result;
+    }
+
+    /**
+     * The cached result of the indicator, or a new run stored for $ttl seconds. A cache that fails
+     * is logged and skipped: health never depends on the cache.
+     *
+     * @param  string|array{0: class-string, 1?: array<string, mixed>}  $definition
+     * @return array{0: Health, 1: float}
+     */
+    private function cached(string $name, string|array $definition, int $ttl): array
+    {
+        try {
+            $store = $this->cache->store($this->config->string('actuator.health.cache.store', 'file'));
+            // The definition is part of the key, so a changed class or argument is a new entry.
+            $key = "actuator:health:{$name}:".hash('xxh128', serialize($definition));
+            $entry = $store->get($key);
+        } catch (Throwable $exception) {
+            Log::warning("Health cache could not be read for indicator [{$name}]: {$exception->getMessage()}", ['exception' => $exception]);
+
+            return $this->run($name, $definition);
+        }
+
+        $hit = self::fromCache($entry);
+        if ($hit !== null) {
+            return $hit;
+        }
+
+        [$health, $seconds] = $this->run($name, $definition);
+
+        try {
+            // Only plain values, never the indicator or the exception it threw.
+            $store->put($key, ['status' => $health->status->value, 'details' => $health->details, 'duration' => $seconds], $ttl);
+        } catch (Throwable $exception) {
+            Log::warning("Health cache could not be written for indicator [{$name}]: {$exception->getMessage()}", ['exception' => $exception]);
+        }
+
+        return [$health, $seconds];
+    }
+
+    /**
+     * Rebuilds a result from a cache entry. Null for a miss, or an entry in another shape.
+     *
+     * @return array{0: Health, 1: float}|null
+     */
+    private static function fromCache(mixed $entry): ?array
+    {
+        if (! is_array($entry) || ! is_string($entry['status'] ?? null) || ! is_array($entry['details'] ?? null) || ! is_float($entry['duration'] ?? null)) {
+            return null;
+        }
+
+        $status = Status::tryFrom($entry['status']);
+        $details = [];
+        foreach ($entry['details'] as $key => $value) {
+            $details[(string) $key] = $value;
+        }
+
+        return $status === null ? null : [new Health($status, $details), $entry['duration']];
+    }
+
+    /**
+     * Runs the indicator, records how long it took in the histogram, and returns both.
+     *
+     * @param  string|array{0: class-string, 1?: array<string, mixed>}  $definition
+     * @return array{0: Health, 1: float}
+     */
+    private function run(string $name, string|array $definition): array
+    {
+        $start = hrtime(true);
+        $health = $this->check($name, $definition);
+        $seconds = (hrtime(true) - $start) / 1e9;
+
+        $this->registry->timer(self::DURATION_METER, ['indicator' => $name])->record($seconds);
+
+        return [$health, $seconds];
+    }
+
+    /**
+     * Seconds the results stay cached. 0, the default, turns the cache off.
+     */
+    private function ttl(): int
+    {
+        $ttl = $this->config->get('actuator.health.cache.ttl', 0);
+
+        if (! is_numeric($ttl) || (int) $ttl != $ttl || $ttl < 0) {
+            throw new InvalidArgumentException('Health setting [actuator.health.cache.ttl] must be a whole number of seconds, 0 or more.');
+        }
+
+        return (int) $ttl;
+    }
+
+    /**
+     * An ISO-8601 duration with millisecond precision, as Spring Boot writes a Duration: PT0.012S.
+     */
+    private static function duration(float $seconds): string
+    {
+        return 'PT'.round($seconds, 3).'S';
     }
 
     /**

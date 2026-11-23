@@ -42,16 +42,17 @@ final class HealthEndpointTest extends TestCase
     {
         config()->set('actuator.health.show_details', 'always');
 
-        $this->getJson('/actuator/health')
-            ->assertOk()
-            ->assertExactJson([
-                'status' => 'UP',
-                'components' => [
-                    'ping' => ['status' => 'UP'],
-                    'fixed' => ['status' => 'UP', 'details' => ['key' => 'value']],
-                ],
-                'groups' => ['liveness'],
-            ]);
+        $response = $this->getJson('/actuator/health')->assertOk();
+
+        $this->assertEquals([
+            'status' => 'UP',
+            'components' => [
+                'ping' => ['status' => 'UP'],
+                'fixed' => ['status' => 'UP', 'details' => ['key' => 'value']],
+            ],
+            'groups' => ['liveness'],
+        ], $this->withoutDurations($response->json()));
+        $this->assertMatchesRegularExpression('/^PT\d+(\.\d+)?S$/', $response->json('components.ping.details.duration'));
     }
 
     #[Test]
@@ -76,7 +77,7 @@ final class HealthEndpointTest extends TestCase
 
         $user = new User;
         $user->id = 1;
-        $this->actingAs($user)->getJson('/actuator/health')->assertJsonPath('components.fixed.details', ['key' => 'value']);
+        $this->actingAs($user)->getJson('/actuator/health')->assertJsonPath('components.fixed.details.key', 'value');
     }
 
     #[Test]
@@ -98,7 +99,8 @@ final class HealthEndpointTest extends TestCase
 
         $this->getJson('/actuator/health')
             ->assertStatus(503)
-            ->assertJsonPath('components.fixed', ['status' => 'DOWN', 'details' => ['error' => 'RuntimeException: Boom']])
+            ->assertJsonPath('components.fixed.status', 'DOWN')
+            ->assertJsonPath('components.fixed.details.error', 'RuntimeException: Boom')
             ->assertJsonPath('components.ping.status', 'UP');
     }
 
@@ -110,9 +112,8 @@ final class HealthEndpointTest extends TestCase
 
         $this->getJson('/actuator/health')
             ->assertStatus(503)
-            ->assertJsonPath('components.broken', ['status' => 'DOWN', 'details' => [
-                'error' => 'Illuminate\\Contracts\\Container\\BindingResolutionException: Target class [App\\Health\\DoesNotExist] does not exist.',
-            ]])
+            ->assertJsonPath('components.broken.status', 'DOWN')
+            ->assertJsonPath('components.broken.details.error', 'Illuminate\\Contracts\\Container\\BindingResolutionException: Target class [App\\Health\\DoesNotExist] does not exist.')
             ->assertJsonPath('components.ping.status', 'UP');
     }
 
@@ -140,8 +141,10 @@ final class HealthEndpointTest extends TestCase
     {
         config()->set('actuator.health.groups.liveness.show_details', 'always');
 
-        $this->getJson('/actuator/health/liveness')
-            ->assertExactJson(['status' => 'UP', 'components' => ['ping' => ['status' => 'UP']]]);
+        $this->assertEquals(
+            ['status' => 'UP', 'components' => ['ping' => ['status' => 'UP']]],
+            $this->withoutDurations($this->getJson('/actuator/health/liveness')->json()),
+        );
         $this->getJson('/actuator/health')->assertJsonMissingPath('components');
     }
 
@@ -152,10 +155,8 @@ final class HealthEndpointTest extends TestCase
 
         config()->set('actuator.health.show_details', 'always');
 
-        $this->getJson('/actuator/health/fixed')
-            ->assertOk()
-            ->assertExactJson(['status' => 'UP', 'details' => ['key' => 'value']]);
-        $this->getJson('/actuator/health/liveness/ping')->assertOk()->assertExactJson(['status' => 'UP']);
+        $this->assertEquals(['status' => 'UP', 'details' => ['key' => 'value']], $this->withoutDurations($this->getJson('/actuator/health/fixed')->assertOk()->json()));
+        $this->assertEquals(['status' => 'UP'], $this->withoutDurations($this->getJson('/actuator/health/liveness/ping')->assertOk()->json()));
     }
 
     #[Test]
@@ -331,5 +332,26 @@ final class HealthEndpointTest extends TestCase
         $this->expectExceptionMessage('Health status setting [actuator.health.groups.liveness.status.order] contains unknown status [NOPE].');
 
         $this->getJson('/actuator/health/liveness');
+    }
+
+    /**
+     * The health JSON without the "duration" detail, which differs on each run. Details left empty
+     * are removed.
+     *
+     * @param  array<string, mixed>  $health
+     * @return array<string, mixed>
+     */
+    private function withoutDurations(array $health): array
+    {
+        unset($health['details']['duration']);
+        if (($health['details'] ?? null) === []) {
+            unset($health['details']);
+        }
+
+        foreach ($health['components'] ?? [] as $name => $component) {
+            $health['components'][$name] = $this->withoutDurations($component);
+        }
+
+        return $health;
     }
 }
