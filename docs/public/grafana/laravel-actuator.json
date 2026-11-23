@@ -2303,7 +2303,7 @@
           "range": true,
           "instant": false,
           "expr": "max by (connection, queue, state) (laravel_queue_jobs{job=~\"$job\"})",
-          "legendFormat": "{{queue}} {{state}}",
+          "legendFormat": "{{connection}} {{queue}} {{state}}",
           "refId": "A"
         }
       ],
