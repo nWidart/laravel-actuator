@@ -53,6 +53,7 @@ export default defineConfig({
 								{ slug: 'guides/write-a-health-indicator' },
 								{ slug: 'guides/define-health-groups' },
 								{ slug: 'guides/show-health-details' },
+								{ slug: 'guides/monitor-queues' },
 							],
 						},
 						{

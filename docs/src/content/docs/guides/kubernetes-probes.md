@@ -102,6 +102,9 @@ Keep `liveness` minimal. A liveness failure restarts the container, which does n
 outage. [Liveness and readiness](/laravel-actuator/concepts/liveness-and-readiness/) explains the
 trade-offs.
 
+Keep the queue indicators out of both probes: restarting web pods does not drain a queue. Put them
+in a group of their own, as [Monitor queues](/laravel-actuator/guides/monitor-queues/) shows.
+
 ## Cache the results
 
 The kubelet probes every pod every few seconds, and other checkers may too. When an indicator is

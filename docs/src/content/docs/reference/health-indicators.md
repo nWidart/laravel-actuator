@@ -15,6 +15,9 @@ passed by name in the [definition](/laravel-actuator/reference/configuration/#de
 | `migrations`     | `MigrationsHealthIndicator`      | Yes                |
 | `cache`          | `CacheHealthIndicator`           | Yes                |
 | `redis`          | `RedisHealthIndicator`           | No                 |
+| `queue`          | `QueueHealthIndicator`           | No                 |
+| `failedJobs`     | `FailedJobsHealthIndicator`      | No                 |
+| `horizon`        | `HorizonHealthIndicator`         | No                 |
 
 ## `PingHealthIndicator`
 
@@ -159,6 +162,113 @@ Sends `PING` to a Redis connection. Requires the `phpredis` extension or `predis
 | Detail       | Type   | Description             |
 | ------------ | ------ | ----------------------- |
 | `connection` | string | Connection name.        |
+
+## `QueueHealthIndicator`
+
+Reads the size of each watched queue. On the database driver, each read runs a `COUNT(*)` on the
+jobs table. See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
+
+| Argument           | Type            | Default | Description                                      |
+| ------------------ | --------------- | ------- | ------------------------------------------------ |
+| `queues`           | map or `null`   | `null`  | Connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. `null` reads [`queue.queues`](/laravel-actuator/reference/configuration/#queue). Empty watches the default queue of the default connection. |
+| `warningThreshold` | integer or null | `null`  | Size at which a queue is `WARNING`. `null` never is. |
+| `downThreshold`    | integer or null | `null`  | Size at which a queue is `DOWN`. `null` never is.    |
+
+The default queue of a connection is its `queue` key in `config/queue.php`, or `default`.
+
+| Status    | When                                                                     |
+| --------- | ------------------------------------------------------------------------ |
+| `UP`      | Every queue is below the thresholds.                                     |
+| `WARNING` | A queue reaches `warningThreshold`, and none reaches `downThreshold`.    |
+| `DOWN`    | A queue reaches `downThreshold`, or a queue cannot be read.              |
+
+| Detail             | Type    | Description                                                       |
+| ------------------ | ------- | ----------------------------------------------------------------- |
+| `queues`           | map     | Connection name to queue name to the counts below.                |
+| `warningThreshold` | integer | The configured argument, when it is set.                          |
+| `downThreshold`    | integer | The configured argument, when it is set.                          |
+
+Each queue has these counts:
+
+| Count      | Type    | Description                                                         |
+| ---------- | ------- | ------------------------------------------------------------------- |
+| `size`     | integer | Every job on the queue, as `Queue::size()` counts it.              |
+| `pending`  | integer | Jobs waiting to run. Only when the driver has `pendingSize()`.      |
+| `delayed`  | integer | Jobs waiting for their delay. Only when the driver has `delayedSize()`. |
+| `reserved` | integer | Jobs a worker runs now. Only when the driver has `reservedSize()`. |
+| `error`    | string  | Only when the queue cannot be read: `<exception class>: <exception message>`. It replaces the counts. |
+
+The built-in drivers count `pending`, `delayed` and `reserved` since Laravel 12.20. A queue that
+cannot be read, such as an SQS queue that does not answer, does not hide the others:
+
+```json
+{
+  "status": "DOWN",
+  "details": {
+    "queues": {
+      "redis": { "default": { "size": 12, "pending": 10, "delayed": 1, "reserved": 1 } },
+      "sqs": { "reports": { "error": "Aws\\Sqs\\Exception\\SqsException: ..." } }
+    },
+    "warningThreshold": 100,
+    "downThreshold": 1000
+  }
+}
+```
+
+## `FailedJobsHealthIndicator`
+
+Counts the failed jobs that the failer (`queue.failer`) stores.
+
+| Argument           | Type            | Default | Description                                      |
+| ------------------ | --------------- | ------- | ------------------------------------------------ |
+| `warningThreshold` | integer or null | `1`     | Count at which the indicator is `WARNING`. `null` never is. |
+| `downThreshold`    | integer or null | `null`  | Count at which the indicator is `DOWN`. `null` never is.    |
+| `minutes`          | integer or null | `null`  | Count only the jobs that failed within this many minutes. `null` counts them all. |
+| `connection`       | string or null  | `null`  | Count only the jobs of this queue connection.    |
+| `queue`            | string or null  | `null`  | Count only the jobs of this queue.               |
+
+Every failer that Laravel ships counts the jobs, except `dynamodb`. Only the `database` and
+`database-uuids` failers count within a window: they compare `failed_at` with the time now.
+
+| Status    | When                                                                 |
+| --------- | -------------------------------------------------------------------- |
+| `UP`      | The count is below the thresholds.                                   |
+| `WARNING` | The count reaches `warningThreshold`, and not `downThreshold`.       |
+| `DOWN`    | The count reaches `downThreshold`, or the failer throws.             |
+| `UNKNOWN` | The failer cannot count the jobs, or not within a window.            |
+
+| Detail             | Type    | Description                                         |
+| ------------------ | ------- | --------------------------------------------------- |
+| `connection`       | string  | The configured argument, when it is set.            |
+| `queue`            | string  | The configured argument, when it is set.            |
+| `minutes`          | integer | The configured argument, when it is set.            |
+| `count`            | integer | The failed jobs.                                    |
+| `warningThreshold` | integer | The configured argument, when it is set.            |
+| `downThreshold`    | integer | The configured argument, when it is set.            |
+| `error`            | string  | Only when `UNKNOWN`: the failer class, and why it cannot count. |
+
+Without `minutes`, the count holds every failed job until you retry or delete it, for example with
+`php artisan queue:prune-failed`.
+
+## `HorizonHealthIndicator`
+
+Reports the status of the Horizon master supervisors, as `php artisan horizon:status` does.
+Requires `laravel/horizon`.
+
+Arguments: none.
+
+| Status    | When                                                              |
+| --------- | ----------------------------------------------------------------- |
+| `UP`      | Every master supervisor runs.                                     |
+| `WARNING` | A master supervisor is paused (`php artisan horizon:pause`).      |
+| `DOWN`    | No master supervisor runs: Horizon is inactive.                   |
+| `UNKNOWN` | `laravel/horizon` is not installed.                               |
+
+| Detail    | Type    | Description                                                |
+| --------- | ------- | ---------------------------------------------------------- |
+| `status`  | string  | `running`, `paused` or `inactive`.                         |
+| `masters` | integer | The master supervisors, one for each `php artisan horizon` process. |
+| `error`   | string  | Only when `UNKNOWN`: `laravel/horizon is not installed`.   |
 
 ## Error detail
 

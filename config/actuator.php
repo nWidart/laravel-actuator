@@ -90,6 +90,12 @@ return [
             'migrations' => MigrationsHealthIndicator::class,
             'cache' => CacheHealthIndicator::class,
             // 'redis' => Nwidart\Actuator\Health\Indicators\RedisHealthIndicator::class,
+            // Size of each queue of "queue.queues" below, WARNING or DOWN from a threshold:
+            // 'queue' => [Nwidart\Actuator\Health\Indicators\QueueHealthIndicator::class, ['warningThreshold' => 100, 'downThreshold' => 1000]],
+            // Failed jobs, WARNING from 1, optionally within the last minutes:
+            // 'failedJobs' => [Nwidart\Actuator\Health\Indicators\FailedJobsHealthIndicator::class, ['downThreshold' => 50, 'minutes' => 60]],
+            // Horizon status, DOWN when inactive, WARNING when paused:
+            // 'horizon' => Nwidart\Actuator\Health\Indicators\HorizonHealthIndicator::class,
         ],
 
         // Severity order, most severe first, and the HTTP status code of
@@ -127,6 +133,21 @@ return [
         // result: a hanging dependency can make the scrape time out. Turn
         // the cache on and keep connect timeouts short.
         'metrics' => env('ACTUATOR_HEALTH_METRICS', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queues
+    |--------------------------------------------------------------------------
+    |
+    | The queues the "queue" health indicator watches, by connection:
+    | ['redis' => ['default', 'emails']]. Empty watches the default
+    | queue of the default connection.
+    |
+    */
+
+    'queue' => [
+        'queues' => [],
     ],
 
     /*

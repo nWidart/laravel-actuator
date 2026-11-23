@@ -31,6 +31,9 @@ creates a fresh state for each request, so these problems are rare in a Laravel 
 PHP-FPM or web server process stops answering, the liveness probe times out, and that is the failure
 liveness exists to catch.
 
+A restart does not fix a queue backlog either: restarting web pods does not drain a queue. Keep the
+queue indicators out of liveness. See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
+
 ## Why readiness checks maintenance mode
 
 The default `readiness` group contains `readinessState`, which reports `OUT_OF_SERVICE` while the

@@ -29,6 +29,7 @@ Keys you do not publish keep their default values.
 | `health.cache.ttl`               | int (seconds)           | `0`                                      | `ACTUATOR_HEALTH_CACHE_TTL`    |
 | `health.cache.store`             | string                  | `'file'`                                 | `ACTUATOR_HEALTH_CACHE_STORE`  |
 | `health.metrics`                 | bool                    | `false`                                  | `ACTUATOR_HEALTH_METRICS`      |
+| `queue.queues`                   | map of lists of strings | `[]`                                     |                                |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
 | `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
@@ -250,6 +251,20 @@ holds its result. An indicator that hangs, such as a database that does not answ
 whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance
 is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
 database, cache and Redis connections short.
+
+## `queue`
+
+```php
+'queue' => [
+    'queues' => [],
+],
+```
+
+| Key      | Description                                                                          |
+| -------- | ------------------------------------------------------------------------------------ |
+| `queues` | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set. Empty, the default, watches the default queue of the default connection. |
+
+See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
 
 ## `info`
 
