@@ -4,18 +4,23 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Info\Contributors;
 
+use Nwidart\Actuator\Info\BuildInfo;
 use Nwidart\Actuator\Info\InfoContributor;
 
 /**
- * Reads the current branch and commit from the .git directory, when deployed with one.
+ * Reads the current branch and commit from the .git directory, when deployed with one. Without it,
+ * falls back to the commit and branch in the file written by "php artisan actuator:build-info".
  */
 final readonly class GitInfoContributor implements InfoContributor
 {
     private string $directory;
 
-    public function __construct(?string $directory = null)
+    private BuildInfo $buildInfo;
+
+    public function __construct(?string $directory = null, ?string $buildInfoPath = null)
     {
         $this->directory = $directory ?? base_path('.git');
+        $this->buildInfo = new BuildInfo($buildInfoPath);
     }
 
     public function contribute(): array
@@ -23,7 +28,7 @@ final readonly class GitInfoContributor implements InfoContributor
         $head = $this->read('HEAD');
 
         if ($head === null) {
-            return [];
+            return $this->fromBuildInfo();
         }
 
         if (! str_starts_with($head, 'ref: ')) {
@@ -36,6 +41,19 @@ final readonly class GitInfoContributor implements InfoContributor
         return array_filter([
             'branch' => str_starts_with($ref, 'refs/heads/') ? substr($ref, 11) : $ref,
             'commit' => $commit === null ? null : ['id' => substr($commit, 0, 7)],
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function fromBuildInfo(): array
+    {
+        $build = $this->buildInfo->read();
+
+        return array_filter([
+            'branch' => $build['branch'] ?? null,
+            'commit' => isset($build['commit']) ? ['id' => substr($build['commit'], 0, 7)] : null,
         ]);
     }
 

@@ -7,6 +7,7 @@ use Nwidart\Actuator\Health\Indicators\MigrationsHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\PingHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\ReadinessStateHealthIndicator;
 use Nwidart\Actuator\Info\Contributors\AppInfoContributor;
+use Nwidart\Actuator\Info\Contributors\BuildInfoContributor;
 use Nwidart\Actuator\Info\Contributors\GitInfoContributor;
 use Nwidart\Actuator\Info\Contributors\OsInfoContributor;
 use Nwidart\Actuator\Info\Contributors\PhpInfoContributor;
@@ -103,13 +104,23 @@ return [
     |--------------------------------------------------------------------------
     | Info endpoint
     |--------------------------------------------------------------------------
+    |
+    | "php artisan actuator:build-info" writes the build info file at build
+    | time. The "build" contributor shows it, and the "git" contributor
+    | reads its commit and branch when the .git directory is absent.
+    |
     */
 
     'info' => [
         'middleware' => [],
 
+        'build' => [
+            'path' => base_path('bootstrap/cache/actuator-build.json'),
+        ],
+
         'contributors' => [
             'app' => AppInfoContributor::class,
+            'build' => BuildInfoContributor::class,
             'git' => GitInfoContributor::class,
             'php' => PhpInfoContributor::class,
             'os' => OsInfoContributor::class,

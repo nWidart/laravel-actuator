@@ -25,7 +25,8 @@ Keys you do not publish keep their default values.
 | `health.indicators`              | map of definitions      | `ping`, `readinessState`, `diskSpace`, `db`, `migrations`, `cache` |      |
 | `health.groups`                  | map of groups           | `liveness`, `readiness`                  |                                |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
-| `info.contributors`              | map of definitions      | `app`, `git`, `php`, `os`, `process`     |                                |
+| `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
+| `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
 | `env.middleware`                 | list of strings         | `[]`                                     |                                |
 | `env.show_values`                | visibility              | `'never'`                                |                                |
 | `mappings.middleware`            | list of strings         | `[]`                                     |                                |
@@ -161,8 +162,12 @@ An unknown name in `include` throws `InvalidArgumentException` when the group is
 ```php
 'info' => [
     'middleware' => [],
+    'build' => [
+        'path' => base_path('bootstrap/cache/actuator-build.json'),
+    ],
     'contributors' => [
         'app' => AppInfoContributor::class,
+        'build' => BuildInfoContributor::class,
         'git' => GitInfoContributor::class,
         'php' => PhpInfoContributor::class,
         'os' => OsInfoContributor::class,
@@ -174,6 +179,7 @@ An unknown name in `include` throws `InvalidArgumentException` when the group is
 | Key            | Description                                                                         |
 | -------------- | ----------------------------------------------------------------------------------- |
 | `middleware`   | Middleware added after the shared `middleware`.                                     |
+| `build.path`   | The build info file. `php artisan actuator:build-info` writes it; the `build` and `git` contributors read it. |
 | `contributors` | Map of response key to contributor [definition](#definitions). The class must implement `Nwidart\Actuator\Info\InfoContributor`. |
 
 See the [info contributors reference](/laravel-actuator/reference/info-contributors/).

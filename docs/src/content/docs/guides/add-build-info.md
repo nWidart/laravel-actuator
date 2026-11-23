@@ -4,101 +4,65 @@ description: Show the version, commit and build time of a deployment in the info
 ---
 
 The built-in `git` contributor reads the `.git` directory. Many deployments do not ship it: Docker
-images, Laravel Vapor, or artifacts built in CI. Pass the build data through the environment
-instead, and show it with a contributor.
+images, Laravel Vapor, or artifacts built in CI. Write the build data to a file at build time
+instead. The built-in `build` contributor shows it, and the `git` contributor falls back to it.
 
-## Pass the build data to the application
+## Write the build info file
 
-Set environment variables at build time. For a Docker image:
+Run the command at build time:
+
+```bash
+php artisan actuator:build-info
+```
+
+It writes `bootstrap/cache/actuator-build.json` with four values:
+
+| Value     | Option            | Default                                 |
+| --------- | ----------------- | --------------------------------------- |
+| `version` | `--build-version` | `git describe --tags --always`          |
+| `time`    | `--time`          | Now, in ISO-8601 UTC                    |
+| `commit`  | `--commit`        | `git rev-parse HEAD`                    |
+| `branch`  | `--branch`        | The current git branch                  |
+
+Without `git` or a repository, the git defaults are `null`. Pass the values as options instead.
+`--path` writes another file. To change the file for good, set `info.build.path` in
+`config/actuator.php`.
+
+`bootstrap/cache` must be writable when the command runs, and the file must be shipped with the
+application.
+
+## In a Docker image
+
+A Docker build context usually has no `.git` directory. Pass the values as build arguments:
 
 ```dockerfile title="Dockerfile"
 ARG APP_VERSION=dev
-ARG GIT_COMMIT=unknown
-ARG BUILD_TIME
-ENV APP_VERSION=$APP_VERSION \
-    GIT_COMMIT=$GIT_COMMIT \
-    BUILD_TIME=$BUILD_TIME
+ARG GIT_COMMIT
+ARG GIT_BRANCH
+
+COPY . .
+RUN php artisan actuator:build-info \
+    --build-version="$APP_VERSION" \
+    --commit="$GIT_COMMIT" \
+    --branch="$GIT_BRANCH"
 ```
 
 ```bash
 docker build \
   --build-arg APP_VERSION="$(git describe --tags --always)" \
   --build-arg GIT_COMMIT="$(git rev-parse HEAD)" \
-  --build-arg BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  --build-arg GIT_BRANCH="$(git rev-parse --abbrev-ref HEAD)" \
   -t my-app .
 ```
 
-In GitHub Actions, the commit is `${{ github.sha }}` and the tag is `${{ github.ref_name }}`.
+Run the command after `COPY`, in the same stage as the final image, so the file is in the image.
 
-## Read the data in configuration
+## In CI
 
-Read environment variables in a configuration file, not in the contributor. `env()` returns `null`
-once the configuration is cached:
+In GitHub Actions, before the artifact or image is built:
 
-```php title="config/build.php"
-<?php
-
-return [
-    'version' => env('APP_VERSION', 'dev'),
-    'commit' => env('GIT_COMMIT'),
-    'time' => env('BUILD_TIME'),
-];
-```
-
-## Write the contributors
-
-A `build` section, like the one Spring Boot shows:
-
-```php title="app/Info/BuildInfoContributor.php"
-<?php
-
-namespace App\Info;
-
-use Nwidart\Actuator\Info\InfoContributor;
-
-final class BuildInfoContributor implements InfoContributor
-{
-    public function contribute(): array
-    {
-        return array_filter([
-            'version' => config('build.version'),
-            'time' => config('build.time'),
-        ]);
-    }
-}
-```
-
-A replacement for the `git` section that reads the commit from configuration:
-
-```php title="app/Info/EnvGitInfoContributor.php"
-<?php
-
-namespace App\Info;
-
-use Nwidart\Actuator\Info\InfoContributor;
-
-final class EnvGitInfoContributor implements InfoContributor
-{
-    public function contribute(): array
-    {
-        $commit = config('build.commit');
-
-        return $commit === null ? [] : ['commit' => ['id' => substr($commit, 0, 7)]];
-    }
-}
-```
-
-## Register the contributors
-
-```php title="config/actuator.php"
-'contributors' => [
-    'app' => AppInfoContributor::class,
-    'build' => App\Info\BuildInfoContributor::class,
-    'git' => App\Info\EnvGitInfoContributor::class,
-    'php' => PhpInfoContributor::class,
-    'os' => OsInfoContributor::class,
-    'process' => ProcessInfoContributor::class,
-],
+```yaml title=".github/workflows/deploy.yml"
+- run: php artisan actuator:build-info --build-version="${{ github.ref_name }}" --commit="${{ github.sha }}"
 ```
 
 ## Check the result
@@ -110,8 +74,8 @@ curl http://localhost/actuator/info
 ```json
 {
   "app": { "name": "Laravel", "environment": "production", "laravel": "13.43.0", "timezone": "UTC", "locale": "en" },
-  "build": { "version": "v1.4.2", "time": "2026-11-22T09:12:44Z" },
-  "git": { "commit": { "id": "ae06613" } },
+  "build": { "version": "v1.4.2", "time": "2026-11-22T09:12:44Z", "commit": "ae06613b0c5e1d6f2a7b8c9d0e1f2a3b4c5d6e7f", "branch": "main" },
+  "git": { "branch": "main", "commit": { "id": "ae06613" } },
   "php": { "version": "8.4.27", "sapi": "fpm-fcgi" }
 }
 ```
@@ -122,4 +86,5 @@ to show the version of each instance.
 ## See also
 
 - [Customise the info endpoint](/laravel-actuator/guides/write-an-info-contributor/)
+- [Info contributors reference](/laravel-actuator/reference/info-contributors/)
 - [Info endpoint reference](/laravel-actuator/reference/endpoints/info/)
