@@ -224,6 +224,17 @@ hides behind another's success. Pick the store for your runtime:
 Do not use `array` under PHP-FPM: it lives for one request, so nothing is reused. Do not use `file`
 when several servers share the `storage` directory.
 
+A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
+and a warning is logged, once per request under PHP-FPM, once per worker under Octane. A result the store cannot serialize is answered without being cached. A published file
+without a `cache` key keeps the cache off.
+
+The cache cuts repeated runs while the checks are fast. Probes that arrive while a slow check runs
+all miss the cache and run the check too. Keep the connection and read timeouts of the checked
+services short.
+
+Keep the TTL short, 2 to 5 seconds. A longer one keeps a stale `DOWN` and holds the instance out
+of traffic after it recovered. See [Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/#cache-the-results).
+
 ### `health.metrics`
 
 Export the health status as the [health status gauges](/laravel-actuator/reference/metrics/#health-status)
@@ -239,17 +250,6 @@ holds its result. An indicator that hangs, such as a database that does not answ
 whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance
 is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
 database, cache and Redis connections short.
-
-A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
-and a warning is logged, once per request under PHP-FPM, once per worker under Octane. A result the store cannot serialize is answered without being cached. A published file
-without a `cache` key keeps the cache off.
-
-The cache cuts repeated runs while the checks are fast. Probes that arrive while a slow check runs
-all miss the cache and run the check too. Keep the connection and read timeouts of the checked
-services short.
-
-Keep the TTL short, 2 to 5 seconds. A longer one keeps a stale `DOWN` and holds the instance out
-of traffic after it recovered. See [Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/#cache-the-results).
 
 ## `info`
 
