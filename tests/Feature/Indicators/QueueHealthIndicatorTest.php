@@ -88,6 +88,84 @@ final class QueueHealthIndicatorTest extends TestCase
     }
 
     #[Test]
+    public function a_connection_that_fails_on_its_first_queue_is_not_tried_for_its_other_queues(): void
+    {
+        $connection = new class
+        {
+            public int $calls = 0;
+
+            public function size(?string $queue = null): int
+            {
+                $this->calls++;
+
+                throw new RuntimeException('Connection refused');
+            }
+        };
+
+        $health = $this->indicator(['redis' => ['default', 'emails', 'high', 'low']], ['redis' => $connection])->health();
+
+        $this->assertSame(1, $connection->calls);
+        $this->assertSame(Status::Down, $health->status);
+        $skipped = ['error' => 'Skipped: the connection failed on queue [default]'];
+        $this->assertSame(['queues' => ['redis' => [
+            'default' => ['error' => 'RuntimeException: Connection refused'],
+            'emails' => $skipped,
+            'high' => $skipped,
+            'low' => $skipped,
+        ]]], $health->details);
+    }
+
+    #[Test]
+    public function a_connection_that_cannot_be_made_is_made_once(): void
+    {
+        $factory = Mockery::mock(QueueFactory::class);
+        $factory->expects('connection')->once()->with('sqs')->andThrow(new RuntimeException('No credentials'));
+
+        $health = (new QueueHealthIndicator($factory, config(), ['sqs' => ['reports', 'emails']]))->health();
+
+        $this->assertSame(Status::Down, $health->status);
+        $this->assertSame(['queues' => ['sqs' => [
+            'reports' => ['error' => 'RuntimeException: No credentials'],
+            'emails' => ['error' => 'Skipped: the connection failed on queue [reports]'],
+        ]]], $health->details);
+    }
+
+    #[Test]
+    public function a_queue_that_fails_after_another_answered_leaves_the_next_ones_read(): void
+    {
+        $health = $this->indicator(['sqs' => ['reports', 'deleted', 'emails']], ['sqs' => $this->sized(['reports' => 4, 'emails' => 1])])->health();
+
+        $this->assertSame(Status::Down, $health->status);
+        $this->assertSame(['queues' => ['sqs' => [
+            'reports' => ['size' => 4],
+            'deleted' => ['error' => 'RuntimeException: Queue [deleted] unreachable'],
+            'emails' => ['size' => 1],
+        ]]], $health->details);
+    }
+
+    #[Test]
+    public function a_count_by_state_that_fails_keeps_the_size(): void
+    {
+        $connection = new class
+        {
+            public function size(?string $queue = null): int
+            {
+                return 6;
+            }
+
+            public function pendingSize(?string $queue = null): int
+            {
+                throw new RuntimeException('Timed out');
+            }
+        };
+
+        $health = $this->indicator(['redis' => ['default']], ['redis' => $connection])->health();
+
+        $this->assertSame(Status::Down, $health->status);
+        $this->assertSame(['queues' => ['redis' => ['default' => ['size' => 6, 'error' => 'RuntimeException: Timed out']]]], $health->details);
+    }
+
+    #[Test]
     public function a_count_the_driver_does_not_make_public_is_left_out(): void
     {
         $connection = new class

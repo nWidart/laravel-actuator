@@ -16,7 +16,8 @@ use Throwable;
  * (the built-in drivers since Laravel 12.20), the details also hold the pending, delayed and
  * reserved jobs. DOWN when a queue reaches the down threshold or cannot be read, WARNING when one
  * reaches the warning threshold. A queue that cannot be read shows its error and leaves the others
- * reported.
+ * reported, except when it is the first queue of its connection: the connection is taken as down,
+ * and its other queues are skipped rather than each waiting for the connect timeout.
  */
 final readonly class QueueHealthIndicator implements HealthIndicator
 {
@@ -40,14 +41,32 @@ final readonly class QueueHealthIndicator implements HealthIndicator
         $failed = false;
 
         foreach (WatchedQueues::resolve($this->config, $this->queues) as $connection => $names) {
-            foreach ($names as $name) {
-                try {
-                    $details[$connection][$name] = $this->counts($connection, $name);
-                    $sizes[] = $details[$connection][$name]['size'];
-                } catch (Throwable $exception) {
-                    $details[$connection][$name] = ['error' => $exception::class.': '.$exception->getMessage()];
+            $counts = WatchedQueues::read(fn () => $this->queue->connection($connection), $names);
+            // When the first queue fails, read() takes the connection as down and skips the others.
+            $connectionFailed = $counts[$names[0]] instanceof Throwable;
+
+            foreach ($counts as $name => $queue) {
+                if ($queue instanceof Throwable) {
+                    $details[$connection][$name] = ['error' => $connectionFailed && $name !== $names[0]
+                        ? "Skipped: the connection failed on queue [{$names[0]}]"
+                        : self::error($queue)];
                     $failed = true;
+
+                    continue;
                 }
+
+                $details[$connection][$name] = ['size' => $queue['size']];
+                foreach ($queue as $key => $count) {
+                    if ($count instanceof Throwable) {
+                        // A count by state failed: the size stays, with the error once.
+                        $details[$connection][$name]['error'] ??= self::error($count);
+                        $failed = true;
+                    } else {
+                        $details[$connection][$name][$key] = $count;
+                    }
+                }
+
+                $sizes[] = $queue['size'];
             }
         }
 
@@ -65,13 +84,8 @@ final readonly class QueueHealthIndicator implements HealthIndicator
         return $this->downThreshold === null ? $health : $health->withDetail('downThreshold', $this->downThreshold);
     }
 
-    /**
-     * @return array<string, int>
-     */
-    private function counts(string $connection, string $name): array
+    private static function error(Throwable $exception): string
     {
-        $queue = $this->queue->connection($connection);
-
-        return ['size' => $queue->size($name), ...WatchedQueues::counts($queue, $name)];
+        return $exception::class.': '.$exception->getMessage();
     }
 }

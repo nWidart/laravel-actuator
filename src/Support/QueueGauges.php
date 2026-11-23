@@ -135,57 +135,15 @@ final class QueueGauges
             $this->counts = [];
 
             foreach ($this->queues as $connection => $names) {
-                $this->counts[$connection] = self::read($connection, $names);
+                // Resolved from the current container, not the one of the registration: under Octane
+                // that is the request's sandbox, while the gauges live as long as the worker.
+                $this->counts[$connection] = WatchedQueues::read(
+                    static fn () => CurrentContainer::getInstance()->make(QueueFactory::class)->connection($connection),
+                    $names,
+                );
             }
         }
 
         return $this->counts;
-    }
-
-    /**
-     * The counts of the queues of one connection. Until one queue answers, a failure is taken as the
-     * connection's: its other queues are skipped rather than each waiting for the connect timeout.
-     *
-     * @param  list<string>  $names
-     * @return array<string, array<string, int|Throwable>|Throwable>
-     */
-    private static function read(string $connection, array $names): array
-    {
-        try {
-            // Resolved from the current container, not the one of the registration: under Octane
-            // that is the request's sandbox, while the gauges live as long as the worker.
-            $queue = CurrentContainer::getInstance()->make(QueueFactory::class)->connection($connection);
-        } catch (Throwable $exception) {
-            return array_fill_keys($names, $exception);
-        }
-
-        $counts = [];
-        $reached = false;
-
-        foreach ($names as $name) {
-            try {
-                $size = $queue->size($name);
-                $reached = true;
-            } catch (Throwable $exception) {
-                if (! $reached) {
-                    return array_fill_keys($names, $exception);
-                }
-
-                $counts[$name] = $exception;
-
-                continue;
-            }
-
-            try {
-                $states = WatchedQueues::counts($queue, $name);
-            } catch (Throwable $exception) {
-                // The size is still exported: only the series by state are lost.
-                $states = array_fill_keys(self::STATES, $exception);
-            }
-
-            $counts[$name] = ['size' => $size, ...$states];
-        }
-
-        return $counts;
     }
 }
