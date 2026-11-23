@@ -66,13 +66,16 @@ final class ScheduledTaskRecorder
     /**
      * A background task is only launched here: ScheduledBackgroundTaskFinished reports its end.
      * A foreground command that exits non-zero is followed by ScheduledTaskFailed. A run skipped
-     * because it overlaps another never happened.
+     * because it overlaps another never happened. Laravel 12 has no skippedBecauseOverlapping:
+     * such a run, skipped after ScheduledTaskStarting, is recorded as SUCCESS there.
      */
     public function finished(ScheduledTaskFinished $event): void
     {
         $task = $event->task;
+        // Read by name, so static analysis passes on Laravel 12 and 13 alike.
+        $skipped = (get_object_vars($task)['skippedBecauseOverlapping'] ?? false) === true;
 
-        if (! $task->runInBackground && ! $task->skippedBecauseOverlapping && in_array($task->exitCode, [0, null], true)) {
+        if (! $task->runInBackground && ! $skipped && in_array($task->exitCode, [0, null], true)) {
             SchedulerStore::recordExecution($task, SchedulerStore::SUCCESS);
         }
     }

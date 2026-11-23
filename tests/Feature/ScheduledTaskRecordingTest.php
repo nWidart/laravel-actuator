@@ -156,6 +156,10 @@ final class ScheduledTaskRecordingTest extends TestCase
     #[Test]
     public function an_overlapped_run_keeps_the_last_execution(): void
     {
+        if (! property_exists(SchedulingEvent::class, 'skippedBecauseOverlapping')) {
+            $this->markTestSkipped('Laravel 12 does not mark a run skipped after ScheduledTaskStarting: it is recorded as SUCCESS.');
+        }
+
         $ran = false;
         $task = $this->schedule->call(function () use (&$ran): void {
             $ran = true;
