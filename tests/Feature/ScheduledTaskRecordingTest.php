@@ -10,6 +10,8 @@ use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Scheduling\Event as SchedulingEvent;
+use Illuminate\Console\Scheduling\EventMutex;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -137,8 +139,37 @@ final class ScheduledTaskRecordingTest extends TestCase
         $this->assertSame([
             'time' => '2026-01-01T10:32:00+00:00',
             'status' => 'ERROR',
-            'exception' => ['type' => Exception::class, 'message' => "Scheduled command [{$task->command}] failed with exit code [2]."],
+            'exception' => ['type' => Exception::class, 'message' => 'Scheduled command [report:send] failed with exit code [2].'],
         ], $this->lastExecution('php artisan report:send'));
+    }
+
+    #[Test]
+    public function an_overlapped_run_keeps_the_last_execution(): void
+    {
+        $ran = false;
+        $task = $this->schedule->call(function () use (&$ran): void {
+            $ran = true;
+        })->everyMinute()->description('Prune')->withoutOverlapping();
+        $task->mutex = $this->mutexTakenAfterTheFilters();
+
+        $this->artisan('schedule:run');
+
+        $this->assertFalse($ran);
+        $this->assertSame([], $this->lastExecution('Prune'));
+    }
+
+    #[Test]
+    public function an_overlapped_run_of_a_background_task_keeps_its_start(): void
+    {
+        $task = $this->schedule->exec('sleep 60')->everyMinute()->runInBackground()->withoutOverlapping();
+        event(new ScheduledTaskStarting($task));
+
+        // The run that started at 10:30 still holds the mutex when the run of 10:31 starts.
+        $task->mutex = $this->mutexTakenAfterTheFilters();
+        Carbon::setTestNow('2026-01-01 10:31:00 UTC');
+        $this->artisan('schedule:run');
+
+        $this->assertSame(['time' => '2026-01-01T10:30:00+00:00', 'status' => 'STARTED'], $this->lastExecution('sleep 60'));
     }
 
     #[Test]
@@ -167,6 +198,30 @@ final class ScheduledTaskRecordingTest extends TestCase
         $health = (new SchedulerHealthIndicator)->health();
         $this->assertSame(Status::Up, $health->status);
         $this->assertSame('2026-01-01T10:30:00+00:00', $health->details['lastTick']);
+    }
+
+    #[Test]
+    public function a_tick_reads_back_from_a_store_that_returns_numbers_as_strings(): void
+    {
+        // Like RedisStore, which stores numbers unserialized and reads them back as strings.
+        $this->useStore(new class extends ArrayStore
+        {
+            public function get($key): mixed
+            {
+                $value = parent::get($key);
+
+                return is_int($value) ? (string) $value : $value;
+            }
+        });
+        $this->schedule->call(fn () => null)->everyMinute()->description('Prune');
+
+        $this->startCommand('schedule:run');
+        $this->artisan('schedule:run');
+
+        $health = (new SchedulerHealthIndicator)->health();
+        $this->assertSame(Status::Up, $health->status);
+        $this->assertSame('2026-01-01T10:30:00+00:00', $health->details['lastTick']);
+        $this->assertSame(['time' => '2026-01-01T10:30:00+00:00', 'status' => 'SUCCESS'], $this->lastExecution('Prune'));
     }
 
     #[Test]
@@ -271,6 +326,33 @@ final class ScheduledTaskRecordingTest extends TestCase
         $this->assertTrue($ran);
         $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
         Log::shouldHaveReceived('warning')->with('Scheduler record could not be written: the store rejected the entry.', [])->once();
+    }
+
+    /**
+     * A mutex that another process takes between the withoutOverlapping() filter of
+     * "schedule:run" and the run itself, so the run is skipped after ScheduledTaskStarting.
+     */
+    private function mutexTakenAfterTheFilters(): EventMutex
+    {
+        return new class implements EventMutex
+        {
+            private bool $checked = false;
+
+            public function create(SchedulingEvent $event): bool
+            {
+                return false;
+            }
+
+            public function exists(SchedulingEvent $event): bool
+            {
+                $exists = $this->checked;
+                $this->checked = true;
+
+                return $exists;
+            }
+
+            public function forget(SchedulingEvent $event): void {}
+        };
     }
 
     /**

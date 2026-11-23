@@ -66,7 +66,7 @@ Spring Boot's (3.4 and later):
 | `SUCCESS` | The task ended without an exception, and a command exited with code `0`.        |
 | `ERROR`   | The task threw an exception, or a command exited with another code. The exception of a command is `Exception` with the message `Scheduled command [...] failed with exit code [...]`. |
 
-A task that the scheduler skips, for example because its `when()` filter fails, keeps its last
+A task that the scheduler skips, for example because its `when()` filter fails or it overlaps another run, keeps its last
 execution. A record expires after 7 days without a run, so a removed task leaves no record behind.
 
 The scheduler and the web instances must share the store. Set it with

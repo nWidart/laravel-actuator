@@ -10,6 +10,8 @@ use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Scheduling\Event;
+use Throwable;
 
 /**
  * Records the last execution of each scheduled task, and each tick of "schedule:run", in the
@@ -43,19 +45,30 @@ final class ScheduledTaskRecorder
         }
     }
 
+    /**
+     * The withoutOverlapping() filter of "schedule:run" skips a task whose mutex exists. Another
+     * process can still take the mutex after that filter: the run is then skipped after this
+     * event, and must not overwrite the last execution. The mutex of a run that goes ahead is
+     * only created after this event, by Event::run().
+     */
     public function starting(ScheduledTaskStarting $event): void
     {
-        SchedulerStore::recordExecution($event->task, SchedulerStore::STARTED);
+        if (! self::overlaps($event->task)) {
+            SchedulerStore::recordExecution($event->task, SchedulerStore::STARTED);
+        }
     }
 
     /**
      * A background task is only launched here: ScheduledBackgroundTaskFinished reports its end.
-     * A foreground command that exits non-zero is followed by ScheduledTaskFailed.
+     * A foreground command that exits non-zero is followed by ScheduledTaskFailed. A run skipped
+     * because it overlaps another never happened.
      */
     public function finished(ScheduledTaskFinished $event): void
     {
-        if (! $event->task->runInBackground && in_array($event->task->exitCode, [0, null], true)) {
-            SchedulerStore::recordExecution($event->task, SchedulerStore::SUCCESS);
+        $task = $event->task;
+
+        if (! $task->runInBackground && ! $task->skippedBecauseOverlapping && in_array($task->exitCode, [0, null], true)) {
+            SchedulerStore::recordExecution($task, SchedulerStore::SUCCESS);
         }
     }
 
@@ -68,7 +81,8 @@ final class ScheduledTaskRecorder
     }
 
     /**
-     * The same exception as ScheduleRunCommand reports for a foreground command that exits non-zero.
+     * The exception ScheduleRunCommand reports for a foreground command that exits non-zero, with
+     * the task's short name instead of its command: the arguments can hold a secret.
      */
     public function backgroundFinished(ScheduledBackgroundTaskFinished $event): void
     {
@@ -82,7 +96,20 @@ final class ScheduledTaskRecorder
 
         SchedulerStore::recordExecution($task, SchedulerStore::ERROR, [
             'type' => Exception::class,
-            'message' => "Scheduled command [{$task->command}] failed with exit code [{$task->exitCode}].",
+            'message' => 'Scheduled command ['.ScheduledTaskTarget::name($task)."] failed with exit code [{$task->exitCode}].",
         ]);
+    }
+
+    /**
+     * Whether another run of the task holds its mutex. A mutex that cannot be read counts as free:
+     * recording must never fail the task.
+     */
+    private static function overlaps(Event $task): bool
+    {
+        try {
+            return $task->withoutOverlapping && $task->mutex->exists($task);
+        } catch (Throwable) {
+            return false;
+        }
     }
 }

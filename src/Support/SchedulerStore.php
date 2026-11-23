@@ -131,10 +131,15 @@ final class SchedulerStore
 
     /**
      * The time "schedule:run" last started, or null when it never did. Throws when the store fails.
+     * A store can read the timestamp back as a string: RedisStore keeps numbers unserialized.
      */
     public static function lastTick(): ?CarbonInterface
     {
         $timestamp = self::store()->get(self::HEARTBEAT_KEY);
+
+        if (is_string($timestamp) && ctype_digit($timestamp)) {
+            $timestamp = (int) $timestamp;
+        }
 
         return is_int($timestamp) ? Date::now()->setTimestamp($timestamp) : null;
     }
