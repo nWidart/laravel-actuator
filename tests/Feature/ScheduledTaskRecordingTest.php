@@ -6,6 +6,7 @@ namespace Nwidart\Actuator\Tests\Feature;
 
 use Exception;
 use Illuminate\Cache\ArrayStore;
+use Illuminate\Cache\CacheManager;
 use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
@@ -13,12 +14,14 @@ use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Console\Scheduling\Event as SchedulingEvent;
 use Illuminate\Console\Scheduling\EventMutex;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Container\Container;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
 use Nwidart\Actuator\Health\Indicators\SchedulerHealthIndicator;
 use Nwidart\Actuator\Health\Status;
+use Nwidart\Actuator\Support\SchedulerStore;
 use Nwidart\Actuator\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
 use RuntimeException;
@@ -262,6 +265,56 @@ final class ScheduledTaskRecordingTest extends TestCase
         } finally {
             Cache::store('file')->flush();
         }
+    }
+
+    #[Test]
+    public function the_cache_key_never_holds_the_target(): void
+    {
+        $store = new class extends ArrayStore
+        {
+            /** @var list<string> */
+            public array $keys = [];
+
+            public function put($key, $value, $seconds): bool
+            {
+                $this->keys[] = $key;
+
+                return parent::put($key, $value, $seconds);
+            }
+        };
+        $this->useStore($store);
+        $task = $this->schedule->command('report:send --token=secret')->everyMinute();
+
+        event(new ScheduledTaskStarting($task));
+
+        $this->assertCount(1, $store->keys);
+        $this->assertStringStartsWith('actuator:scheduler:task:', $store->keys[0]);
+        $this->assertStringNotContainsString('secret', $store->keys[0]);
+        $this->assertStringNotContainsString('report:send', $store->keys[0]);
+        $this->assertSame('STARTED', $this->lastExecution('php artisan report:send --token=secret')['status'] ?? null);
+    }
+
+    #[Test]
+    public function the_store_comes_from_the_current_container(): void
+    {
+        $task = $this->schedule->call(fn () => null)->everyMinute()->description('Prune');
+        // Under Octane each request runs in a clone of the application that
+        // Container::getInstance() points to, with its own cache manager.
+        $sandbox = clone $this->app;
+        $sandbox->instance('app', $sandbox);
+        $sandbox->instance(Container::class, $sandbox);
+        $sandbox->instance('cache', new CacheManager($sandbox));
+        Container::setInstance($sandbox);
+
+        try {
+            event(new ScheduledTaskStarting($task));
+            $inSandbox = SchedulerStore::lastExecutions(['Prune']);
+        } finally {
+            Container::setInstance($this->app);
+        }
+
+        $this->assertSame('STARTED', $inSandbox['Prune']['status'] ?? null);
+        $this->assertSame([], SchedulerStore::lastExecutions(['Prune']));
     }
 
     #[Test]
