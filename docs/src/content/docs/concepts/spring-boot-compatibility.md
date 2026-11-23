@@ -38,7 +38,8 @@ reuses it, and an operator who knows one knows the other.
 - Many indicator names: `ping`, `readinessState`, `diskSpace`, `db`, `redis`.
 
 **JSON formats.** `health`, `info`, `env` and `scheduledtasks` return the structures Spring Boot
-returns, so clients written for Spring Boot can parse them.
+returns, so clients written for Spring Boot can parse them. `scheduledtasks` includes the
+`lastExecution` of each task, as Spring Boot 3.4 does.
 
 **Metrics API.** A meter registry with counters, gauges, timers and distribution summaries, and
 tags, as in Micrometer. The metric names and tags are not those of Spring Boot: see
@@ -61,6 +62,7 @@ lists what is left out.
 | `env` sources       | Many property sources, such as `application.yml` and system properties | Two: `config` and `environment`        |
 | `env` profiles      | Spring profiles                                      | The Laravel environment                               |
 | `scheduledtasks`    | `cron`, `fixedDelay`, `fixedRate`, `custom`          | `cron` and `fixedRate`. The others are always empty.  |
+| `lastExecution`     | Kept in the memory of the application                | Kept in a cache store shared with the scheduler. Two tasks with the same target share one record |
 | `info` content      | `build`, `git`, `java`, `os`, `process`              | `app`, `git`, `php`, `os`, `process`                  |
 | `when_authorized`   | Spring Security roles                                | The `viewActuator` gate                               |
 | Liveness state      | An application state that the application can change | The `ping` indicator: alive while it can answer       |

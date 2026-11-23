@@ -77,7 +77,8 @@ spec:
 
 Each probe boots the application in a new PHP process, which costs more than an HTTP request. Keep
 `periodSeconds` at 30 or more, and `timeoutSeconds` above the boot time plus the slowest
-indicator. Use the same probes for a scheduler pod.
+indicator. Use the same probes for a scheduler pod, or check that it ticks with the `scheduler`
+indicator, as [Monitor the scheduler](/laravel-actuator/guides/monitor-the-scheduler/#probe-the-scheduler-pod) shows.
 
 The command ignores `show_details` and `show_components`, and never uses the health cache. An
 unknown group or component exits `2`. Run it by hand to see why a pod fails:
@@ -101,6 +102,9 @@ cannot serve any request, and that can fail for one instance but not the others:
 Keep `liveness` minimal. A liveness failure restarts the container, which does not fix a database
 outage. [Liveness and readiness](/laravel-actuator/concepts/liveness-and-readiness/) explains the
 trade-offs.
+
+Keep the queue indicators out of both probes: restarting web pods does not drain a queue. Put them
+in a group of their own, as [Monitor queues](/laravel-actuator/guides/monitor-queues/) shows.
 
 ## Cache the results
 

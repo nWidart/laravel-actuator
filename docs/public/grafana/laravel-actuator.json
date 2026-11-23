@@ -2230,6 +2230,189 @@
       }
     },
     {
+      "type": "timeseries",
+      "title": "Queue size, by queue",
+      "description": "From laravel.queue.size, read during the scrape: the jobs in each watched queue (actuator.queue.queues). Every instance reads the same queues, so the panel keeps the largest value. Needs ACTUATOR_QUEUE_METRICS=true.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "expr": "max by (connection, queue) (laravel_queue_size{job=~\"$job\"})",
+          "legendFormat": "{{connection}} {{queue}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 0,
+        "y": 76
+      },
+      "id": 50,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Queued jobs, by state",
+      "description": "From laravel.queue.jobs: pending, delayed and reserved jobs, for the drivers that count them (the built-in drivers since Laravel 12.20). Needs ACTUATOR_QUEUE_METRICS=true.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "expr": "max by (connection, queue, state) (laravel_queue_jobs{job=~\"$job\"})",
+          "legendFormat": "{{connection}} {{queue}} {{state}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 20,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 10,
+        "y": 76
+      },
+      "id": 51,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Failed jobs",
+      "description": "From laravel.queue.failed.jobs: the failed jobs the failer holds, until they are retried or pruned. Missing when the failer cannot count them. Needs ACTUATOR_QUEUE_METRICS=true.",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "range": true,
+          "instant": false,
+          "expr": "max(laravel_queue_failed_jobs{job=~\"$job\"})",
+          "legendFormat": "failed",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none",
+              "group": "A"
+            }
+          },
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 76
+      },
+      "id": 52,
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      }
+    },
+    {
       "type": "row",
       "title": "Cache",
       "id": 24,
@@ -2238,7 +2421,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "panels": []
     },
@@ -2295,7 +2478,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 77
+        "y": 85
       },
       "id": 25,
       "datasource": {
@@ -2417,7 +2600,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 77
+        "y": 85
       },
       "id": 26,
       "datasource": {
@@ -2434,7 +2617,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 85
+        "y": 93
       },
       "panels": []
     },
@@ -2566,7 +2749,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 86
+        "y": 94
       },
       "id": 28,
       "datasource": {
@@ -2627,7 +2810,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 86
+        "y": 94
       },
       "id": 29,
       "datasource": {
@@ -2644,7 +2827,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 94
+        "y": 102
       },
       "panels": []
     },
@@ -2701,7 +2884,7 @@
         "h": 8,
         "w": 14,
         "x": 0,
-        "y": 95
+        "y": 103
       },
       "id": 31,
       "datasource": {
@@ -2787,7 +2970,7 @@
         "h": 8,
         "w": 10,
         "x": 14,
-        "y": 95
+        "y": 103
       },
       "id": 32,
       "datasource": {
@@ -2804,7 +2987,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 103
+        "y": 111
       },
       "panels": []
     },
@@ -2918,7 +3101,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 104
+        "y": 112
       },
       "id": 34,
       "datasource": {
@@ -2990,7 +3173,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 104
+        "y": 112
       },
       "id": 35,
       "datasource": {
@@ -3097,7 +3280,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 104
+        "y": 112
       },
       "id": 36,
       "datasource": {
@@ -3167,7 +3350,7 @@
         "h": 6,
         "w": 4,
         "x": 0,
-        "y": 112
+        "y": 120
       },
       "id": 37,
       "datasource": {
@@ -3228,7 +3411,7 @@
         "h": 6,
         "w": 4,
         "x": 4,
-        "y": 112
+        "y": 120
       },
       "id": 38,
       "datasource": {
@@ -3290,7 +3473,7 @@
         "h": 6,
         "w": 10,
         "x": 8,
-        "y": 112
+        "y": 120
       },
       "id": 39,
       "datasource": {
@@ -3359,7 +3542,7 @@
         "h": 6,
         "w": 6,
         "x": 18,
-        "y": 112
+        "y": 120
       },
       "id": 40,
       "datasource": {

@@ -90,6 +90,15 @@ return [
             'migrations' => MigrationsHealthIndicator::class,
             'cache' => CacheHealthIndicator::class,
             // 'redis' => Nwidart\Actuator\Health\Indicators\RedisHealthIndicator::class,
+            // Size of each queue of "queue.queues" below, WARNING or DOWN from a threshold:
+            // 'queue' => [Nwidart\Actuator\Health\Indicators\QueueHealthIndicator::class, ['warningThreshold' => 100, 'downThreshold' => 1000]],
+            // Failed jobs, WARNING from 1, optionally within the last minutes:
+            // 'failedJobs' => [Nwidart\Actuator\Health\Indicators\FailedJobsHealthIndicator::class, ['downThreshold' => 50, 'minutes' => 60]],
+            // Horizon status, DOWN when inactive, WARNING when paused:
+            // 'horizon' => Nwidart\Actuator\Health\Indicators\HorizonHealthIndicator::class,
+            // DOWN when "schedule:run" has not started for 5 minutes, WARNING
+            // after 2. Reads the store set in "scheduler" below:
+            // 'scheduler' => Nwidart\Actuator\Health\Indicators\SchedulerHealthIndicator::class,
         ],
 
         // Severity order, most severe first, and the HTTP status code of
@@ -127,6 +136,28 @@ return [
         // result: a hanging dependency can make the scrape time out. Turn
         // the cache on and keep connect timeouts short.
         'metrics' => env('ACTUATOR_HEALTH_METRICS', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Queues
+    |--------------------------------------------------------------------------
+    |
+    | The queues the "queue" health indicator watches, by connection:
+    | ['redis' => ['default', 'emails']]. Empty watches the default
+    | queue of the default connection.
+    |
+    */
+
+    'queue' => [
+        'queues' => [],
+
+        // Export the size of these queues and the number of failed jobs as
+        // the gauges laravel_queue_size, laravel_queue_jobs and
+        // laravel_queue_failed_jobs of the prometheus endpoint. Each scrape
+        // then counts the jobs of every queue (a query per queue and state
+        // on the database driver): keep connect timeouts short.
+        'metrics' => env('ACTUATOR_QUEUE_METRICS', false),
     ],
 
     /*
@@ -183,8 +214,31 @@ return [
         'middleware' => [],
     ],
 
+    // The message of a task's last exception is shown when "show_exceptions"
+    // allows it: "never", "always" or "when_authorized". Its type is always
+    // shown. The message can hold a command's arguments.
     'scheduledtasks' => [
         'middleware' => [],
+        'show_exceptions' => 'never',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Scheduler
+    |--------------------------------------------------------------------------
+    |
+    | The scheduler records the last execution of each task and the time of
+    | each "schedule:run" in a cache store. The "scheduledtasks" endpoint
+    | and the "scheduler" health indicator read them. The store must be
+    | shared by the scheduler and the web instances, such as redis or
+    | database: "file" and "array" do not work when the scheduler runs on
+    | another host. Null is the application's default cache store.
+    |
+    */
+
+    'scheduler' => [
+        'record' => env('ACTUATOR_SCHEDULER_RECORD', true),
+        'store' => env('ACTUATOR_SCHEDULER_STORE'),
     ],
 
     /*

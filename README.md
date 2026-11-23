@@ -69,6 +69,7 @@ The [documentation](https://nwidart.github.io/laravel-actuator/) covers the rest
 - [Expose](https://nwidart.github.io/laravel-actuator/guides/expose-endpoints/) and [secure](https://nwidart.github.io/laravel-actuator/guides/secure-endpoints/) endpoints
 - [Configure health indicators](https://nwidart.github.io/laravel-actuator/guides/configure-health-indicators/) and [write your own](https://nwidart.github.io/laravel-actuator/guides/write-a-health-indicator/)
 - [Kubernetes probes](https://nwidart.github.io/laravel-actuator/guides/kubernetes-probes/)
+- [Monitor queues](https://nwidart.github.io/laravel-actuator/guides/monitor-queues/) and [the scheduler](https://nwidart.github.io/laravel-actuator/guides/monitor-the-scheduler/)
 - [Collect metrics with Prometheus](https://nwidart.github.io/laravel-actuator/guides/collect-metrics-with-prometheus/), [record custom metrics](https://nwidart.github.io/laravel-actuator/guides/record-custom-metrics/) and the [Grafana dashboard](https://nwidart.github.io/laravel-actuator/guides/grafana-dashboard/)
 - [Write a custom endpoint](https://nwidart.github.io/laravel-actuator/guides/write-a-custom-endpoint/)
 - [Configuration reference](https://nwidart.github.io/laravel-actuator/reference/configuration/)

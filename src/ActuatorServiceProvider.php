@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Support\ServiceProvider;
@@ -13,6 +14,8 @@ use Nwidart\Actuator\Console\HealthCommand;
 use Nwidart\Actuator\Endpoints\EndpointRegistry;
 use Nwidart\Actuator\Health\HealthGauges;
 use Nwidart\Actuator\Metrics\MeterRegistry;
+use Nwidart\Actuator\Support\QueueGauges;
+use Nwidart\Actuator\Support\ScheduledTaskRecorder;
 use Nwidart\Metrics\AttributeContributors;
 use Nwidart\Metrics\Metrics;
 use Nwidart\Metrics\MetricsServiceProvider;
@@ -56,6 +59,10 @@ final class ActuatorServiceProvider extends ServiceProvider
 
         $this->app->make(EndpointRegistry::class)->loadRoutes();
 
+        // The last execution of each scheduled task and the scheduler's last tick, for the
+        // "scheduledtasks" endpoint and the "scheduler" health indicator.
+        $this->app->make(Dispatcher::class)->subscribe(ScheduledTaskRecorder::class);
+
         // Actuator endpoints keep answering in maintenance mode, so the
         // readiness probe reports OUT_OF_SERVICE instead of an HTML 503.
         // An empty base path is skipped: excepting "/*" would disable
@@ -71,6 +78,7 @@ final class ActuatorServiceProvider extends ServiceProvider
         // the requests they tag. It holds no meter until one is used.
         $registry = $this->app->make(MeterRegistry::class);
         HealthGauges::register($this->app, $registry, $this->app->make(Metrics::class));
+        QueueGauges::register($this->app, $registry, $this->app->make(Metrics::class));
 
         // A meter turned off by an "enable" prefix also stops serving the series it stored before.
         if (config()->array('actuator.metrics.enable', []) !== []) {

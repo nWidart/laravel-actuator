@@ -29,6 +29,8 @@ Keys you do not publish keep their default values.
 | `health.cache.ttl`               | int (seconds)           | `0`                                      | `ACTUATOR_HEALTH_CACHE_TTL`    |
 | `health.cache.store`             | string                  | `'file'`                                 | `ACTUATOR_HEALTH_CACHE_STORE`  |
 | `health.metrics`                 | bool                    | `false`                                  | `ACTUATOR_HEALTH_METRICS`      |
+| `queue.queues`                   | map of lists of strings | `[]`                                     |                                |
+| `queue.metrics`                  | bool                    | `false`                                  | `ACTUATOR_QUEUE_METRICS`       |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
 | `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
@@ -36,6 +38,9 @@ Keys you do not publish keep their default values.
 | `env.show_values`                | visibility              | `'never'`                                |                                |
 | `mappings.middleware`            | list of strings         | `[]`                                     |                                |
 | `scheduledtasks.middleware`      | list of strings         | `[]`                                     |                                |
+| `scheduledtasks.show_exceptions` | visibility              | `'never'`                                |                                |
+| `scheduler.record`               | bool                    | `true`                                   | `ACTUATOR_SCHEDULER_RECORD`    |
+| `scheduler.store`                | string or `null`        | `null`                                   | `ACTUATOR_SCHEDULER_STORE`     |
 | `prometheus.middleware`          | list of strings         | `[]`                                     |                                |
 | `metrics.enable`                 | map of booleans         | `[]`                                     |                                |
 | `metrics.distribution.slo`       | map of lists of numbers | `[]`                                     |                                |
@@ -251,6 +256,28 @@ whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metr
 is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
 database, cache and Redis connections short.
 
+## `queue`
+
+```php
+'queue' => [
+    'queues' => [],
+    'metrics' => env('ACTUATOR_QUEUE_METRICS', false),
+],
+```
+
+| Key       | Description                                                                          |
+| --------- | ------------------------------------------------------------------------------------ |
+| `queues`  | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set, and the queue gauges export them. Empty, the default, watches the default queue of the default connection: for a `failover` connection, the default queue of its first connection. Each connection needs at least one queue name. Any other shape makes the indicator `DOWN` with an `InvalidArgumentException`, and leaves `laravel.queue.size` and `laravel.queue.jobs` out. Each scrape then reports the exception. |
+| `metrics` | Export the [queue gauges](/laravel-actuator/reference/metrics/#queues) of the `prometheus` endpoint: the size of each queue of `queues`, its jobs by state, and the failed jobs. `false`, the default, registers nothing. A published configuration without the key is off too. |
+
+With `metrics` on, each scrape counts the jobs of every queue of `queues`. On the `database` driver,
+that is a `COUNT(*)` on the jobs table for each queue and state. A connection that fails on its
+first queue is skipped for its other queues in that scrape. A slow connection still holds the whole
+scrape: keep its connect timeout short. Under Octane, the gauges and their list of
+queues are set when the worker starts: restart Octane after a change.
+
+See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
+
 ## `info`
 
 ```php
@@ -301,10 +328,34 @@ See the [info contributors reference](/laravel-actuator/reference/info-contribut
 
 'scheduledtasks' => [
     'middleware' => [],
+    'show_exceptions' => 'never',
 ],
 ```
 
-Each key holds the middleware added after the shared `middleware`.
+| Key                              | Description                                                           |
+| -------------------------------- | --------------------------------------------------------------------- |
+| `mappings.middleware`            | Middleware added after the shared `middleware`.                       |
+| `scheduledtasks.middleware`      | Middleware added after the shared `middleware`.                       |
+| `scheduledtasks.show_exceptions` | [Visibility](#visibility-values) of the exception message in a task's `lastExecution`. The exception type is always shown. |
+
+## `scheduler`
+
+```php
+'scheduler' => [
+    'record' => env('ACTUATOR_SCHEDULER_RECORD', true),
+    'store' => env('ACTUATOR_SCHEDULER_STORE'),
+],
+```
+
+| Key      | Description                                                                         |
+| -------- | ----------------------------------------------------------------------------------- |
+| `record` | Record the last execution of each scheduled task and each tick of `schedule:run`. `false` turns recording off: the `scheduledtasks` endpoint leaves out `lastExecution`, and the `scheduler` indicator reports `UNKNOWN`. |
+| `store`  | The cache store for the records. `null` uses the application's default store.      |
+
+The scheduler writes the records, and the web instances read them, so the store must be shared:
+`redis`, `database` or `memcached`, for example. The `file` and `array` stores do not work when the
+scheduler runs on another host. A task's record expires after 7 days without a run. The tick never
+expires. See [monitor the scheduler](/laravel-actuator/guides/monitor-the-scheduler/).
 
 ## `prometheus`
 
@@ -381,7 +432,7 @@ then mixes their samples. After you change the bounds of a meter,
 
 ## Visibility values
 
-`show_details`, `show_components` and `show_values` accept:
+`show_details`, `show_components`, `show_values` and `show_exceptions` accept:
 
 | Value               | Grants access                                                           |
 | ------------------- | ----------------------------------------------------------------------- |

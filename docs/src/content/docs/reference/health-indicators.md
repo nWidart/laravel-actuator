@@ -15,6 +15,10 @@ passed by name in the [definition](/laravel-actuator/reference/configuration/#de
 | `migrations`     | `MigrationsHealthIndicator`      | Yes                |
 | `cache`          | `CacheHealthIndicator`           | Yes                |
 | `redis`          | `RedisHealthIndicator`           | No                 |
+| `queue`          | `QueueHealthIndicator`           | No                 |
+| `failedJobs`     | `FailedJobsHealthIndicator`      | No                 |
+| `horizon`        | `HorizonHealthIndicator`         | No                 |
+| `scheduler`      | `SchedulerHealthIndicator`       | No                 |
 
 ## `PingHealthIndicator`
 
@@ -159,6 +163,162 @@ Sends `PING` to a Redis connection. Requires the `phpredis` extension or `predis
 | Detail       | Type   | Description             |
 | ------------ | ------ | ----------------------- |
 | `connection` | string | Connection name.        |
+
+## `QueueHealthIndicator`
+
+Reads the size of each watched queue. On the database driver, each read runs a `COUNT(*)` on the
+jobs table. See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
+
+| Argument           | Type            | Default | Description                                      |
+| ------------------ | --------------- | ------- | ------------------------------------------------ |
+| `queues`           | map or `null`   | `null`  | Connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. `null` reads [`queue.queues`](/laravel-actuator/reference/configuration/#queue). Empty watches the default queue of the default connection. |
+| `warningThreshold` | integer or null | `null`  | Size at which a queue is `WARNING`. `null` never is. |
+| `downThreshold`    | integer or null | `null`  | Size at which a queue is `DOWN`. `null` never is.    |
+
+The default queue of a connection is its `queue` key in `config/queue.php`, or `default`.
+
+Each connection needs at least one queue name. A single name in place of the list also works:
+`['redis' => 'default']`. Any other shape, such as a list without connection names, makes the
+indicator `DOWN` with this `error`:
+
+```text
+InvalidArgumentException: Watched queues must map a connection name to queue names: ['connection' => ['queue', ...]].
+```
+
+| Status    | When                                                                     |
+| --------- | ------------------------------------------------------------------------ |
+| `UP`      | Every queue is below the thresholds.                                     |
+| `WARNING` | A queue reaches `warningThreshold`, and none reaches `downThreshold`.    |
+| `DOWN`    | A queue reaches `downThreshold`, a queue cannot be read, or `queues` has the wrong shape. |
+
+| Detail             | Type    | Description                                                       |
+| ------------------ | ------- | ----------------------------------------------------------------- |
+| `queues`           | map     | Connection name to queue name to the counts below.                |
+| `warningThreshold` | integer | The configured argument, when it is set.                          |
+| `downThreshold`    | integer | The configured argument, when it is set.                          |
+
+Each queue has these counts:
+
+| Count      | Type    | Description                                                         |
+| ---------- | ------- | ------------------------------------------------------------------- |
+| `size`     | integer | Every job on the queue, as `Queue::size()` counts it.              |
+| `pending`  | integer | Jobs waiting to run. Only when the driver has `pendingSize()`.      |
+| `delayed`  | integer | Jobs waiting for their delay. Only when the driver has `delayedSize()`. |
+| `reserved` | integer | Jobs a worker runs now. Only when the driver has `reservedSize()`. |
+| `error`    | string  | Only when the queue cannot be read: `<exception class>: <exception message>`. It replaces the counts. When a count by state fails, the `size` stays. |
+
+The built-in drivers count `pending`, `delayed` and `reserved` since Laravel 12.20. A queue that
+cannot be read does not hide the other connections. Within one connection, the first queue decides:
+
+- When the first queue fails, the indicator takes the connection as down. It does not try the other
+  queues of that connection, so a connection that does not answer costs one connect timeout, not one
+  per queue. Their `error` is `Skipped: the connection failed on queue [<first queue>]`.
+- When a later queue fails, such as a deleted SQS queue, only that queue shows its `error`. The
+  indicator still reads the next ones.
+
+Any error on the first queue counts as a connection error, even one of that queue alone. Watch a
+queue that may be missing after the others, or on a connection of its own.
+
+```json
+{
+  "status": "DOWN",
+  "details": {
+    "queues": {
+      "database": { "default": { "size": 12, "pending": 10, "delayed": 1, "reserved": 1 } },
+      "redis": {
+        "default": { "error": "RedisException: Connection refused" },
+        "emails": { "error": "Skipped: the connection failed on queue [default]" }
+      }
+    },
+    "warningThreshold": 100,
+    "downThreshold": 1000
+  }
+}
+```
+
+## `FailedJobsHealthIndicator`
+
+Counts the failed jobs that the failer (`queue.failer`) stores.
+
+| Argument           | Type            | Default | Description                                      |
+| ------------------ | --------------- | ------- | ------------------------------------------------ |
+| `warningThreshold` | integer or null | `1`     | Count at which the indicator is `WARNING`. `null` never is. |
+| `downThreshold`    | integer or null | `null`  | Count at which the indicator is `DOWN`. `null` never is.    |
+| `minutes`          | integer or null | `null`  | Count only the jobs that failed within this many minutes. `null` counts them all. |
+| `connection`       | string or null  | `null`  | Count only the jobs of this queue connection.    |
+| `queue`            | string or null  | `null`  | Count only the jobs of this queue.               |
+
+Every failer that Laravel ships counts the jobs, except `dynamodb`. Only the `database` and
+`database-uuids` failers count within a window: they compare `failed_at` with the time now.
+
+| Status    | When                                                                 |
+| --------- | -------------------------------------------------------------------- |
+| `UP`      | The count is below the thresholds.                                   |
+| `WARNING` | The count reaches `warningThreshold`, and not `downThreshold`.       |
+| `DOWN`    | The count reaches `downThreshold`, or the failer throws.             |
+| `UNKNOWN` | The failer cannot count the jobs, or not within a window.            |
+
+| Detail             | Type    | Description                                         |
+| ------------------ | ------- | --------------------------------------------------- |
+| `connection`       | string  | The configured argument, when it is set.            |
+| `queue`            | string  | The configured argument, when it is set.            |
+| `minutes`          | integer | The configured argument, when it is set.            |
+| `count`            | integer | The failed jobs.                                    |
+| `warningThreshold` | integer | The configured argument, when it is set.            |
+| `downThreshold`    | integer | The configured argument, when it is set.            |
+| `error`            | string  | Only when `UNKNOWN`: the failer class, and why it cannot count. |
+
+Without `minutes`, the count holds every failed job until you retry or delete it, for example with
+`php artisan queue:prune-failed`.
+
+## `HorizonHealthIndicator`
+
+Reports the status of the Horizon master supervisors, as `php artisan horizon:status` does.
+Requires `laravel/horizon`.
+
+Arguments: none.
+
+| Status    | When                                                              |
+| --------- | ----------------------------------------------------------------- |
+| `UP`      | Every master supervisor runs.                                     |
+| `WARNING` | A master supervisor is paused (`php artisan horizon:pause`).      |
+| `DOWN`    | No master supervisor runs: Horizon is inactive.                   |
+| `UNKNOWN` | `laravel/horizon` is not installed.                               |
+
+| Detail    | Type    | Description                                                |
+| --------- | ------- | ---------------------------------------------------------- |
+| `status`  | string  | `running`, `paused` or `inactive`.                         |
+| `masters` | integer | The master supervisors, one for each `php artisan horizon` process. |
+| `error`   | string  | Only when `UNKNOWN`: `laravel/horizon is not installed`.   |
+
+## `SchedulerHealthIndicator`
+
+Checks that the scheduler ticks. Each `php artisan schedule:run` records the time it starts in the
+store set by [`scheduler.store`](/laravel-actuator/reference/configuration/#scheduler).
+`schedule:work` starts `schedule:run` every minute. The indicator reads that time back. See
+[monitor the scheduler](/laravel-actuator/guides/monitor-the-scheduler/).
+
+| Argument       | Type            | Default | Description                                            |
+| -------------- | --------------- | ------- | ------------------------------------------------------ |
+| `downAfter`    | integer         | `5`     | Minutes without a tick after which the scheduler is `DOWN`. |
+| `warningAfter` | integer or null | `2`     | Minutes without a tick after which the scheduler is `WARNING`. `null` turns `WARNING` off. |
+
+| Status    | When                                                                     |
+| --------- | ------------------------------------------------------------------------ |
+| `UP`      | The last tick is at most `warningAfter` minutes old.                     |
+| `WARNING` | The last tick is more than `warningAfter` and at most `downAfter` minutes old. |
+| `DOWN`    | The last tick is more than `downAfter` minutes old, the scheduler never ticked, or the store throws. |
+| `UNKNOWN` | `scheduler.record` is `false`, so nothing records the ticks.              |
+
+| Detail         | Type            | Description                                                 |
+| -------------- | --------------- | ----------------------------------------------------------- |
+| `lastTick`     | string or null  | The last tick, ISO 8601. `null` when the scheduler never ticked. Left out when `UNKNOWN`. |
+| `downAfter`    | integer         | The configured argument, in minutes.                        |
+| `warningAfter` | integer or null | The configured argument, in minutes.                        |
+| `error`        | string          | Only when `UNKNOWN`: why.                                   |
+
+The store must be shared by the scheduler and the instance that runs the check. With the `file` or
+`array` store, a check on another host never sees a tick and reports `DOWN`.
 
 ## Error detail
 
