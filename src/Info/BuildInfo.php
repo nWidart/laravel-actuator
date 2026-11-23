@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Info;
 
+use JsonException;
+use RuntimeException;
+
 /**
  * The build info file written by "php artisan actuator:build-info" and read by the build and git contributors.
  */
@@ -47,15 +50,22 @@ final readonly class BuildInfo
 
     /**
      * @param  array<'version'|'time'|'commit'|'branch', string|null>  $values
+     *
+     * @throws RuntimeException When the values cannot be encoded or the file cannot be written.
      */
-    public function write(array $values): bool
+    public function write(array $values): void
     {
-        $directory = dirname($this->path);
-
-        if (! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory)) {
-            return false;
+        try {
+            $json = json_encode($values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        } catch (JsonException $e) {
+            throw new RuntimeException("Could not encode the build info: {$e->getMessage()}.", previous: $e);
         }
 
-        return @file_put_contents($this->path, json_encode($values, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL) !== false;
+        $directory = dirname($this->path);
+
+        if ((! is_dir($directory) && ! @mkdir($directory, 0755, true) && ! is_dir($directory))
+            || @file_put_contents($this->path, $json.PHP_EOL) === false) {
+            throw new RuntimeException("Could not write {$this->path}.");
+        }
     }
 }

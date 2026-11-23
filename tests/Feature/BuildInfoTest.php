@@ -11,6 +11,7 @@ use Nwidart\Actuator\Info\Contributors\BuildInfoContributor;
 use Nwidart\Actuator\Info\Contributors\GitInfoContributor;
 use Nwidart\Actuator\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 final class BuildInfoTest extends TestCase
 {
@@ -91,6 +92,43 @@ final class BuildInfoTest extends TestCase
             ['version' => null, 'time' => '2026-11-22T09:12:44Z', 'commit' => null, 'branch' => null],
             json_decode((string) file_get_contents($path), true),
         );
+    }
+
+    #[Test]
+    public function the_command_writes_nulls_when_running_git_throws(): void
+    {
+        Process::fake(['*' => fn () => throw new RuntimeException('proc_open is disabled')]);
+
+        $this->artisan('actuator:build-info', ['--time' => '2026-11-22T09:12:44Z'])->assertSuccessful();
+
+        $this->assertSame(
+            ['version' => null, 'time' => '2026-11-22T09:12:44Z', 'commit' => null, 'branch' => null],
+            json_decode((string) file_get_contents($this->path), true),
+        );
+    }
+
+    #[Test]
+    public function the_command_fails_when_the_values_cannot_be_encoded(): void
+    {
+        Process::fake();
+
+        $this->artisan('actuator:build-info', ['--build-version' => "\xB1\x31"])
+            ->expectsOutputToContain('Could not encode the build info: Malformed UTF-8')
+            ->assertFailed();
+
+        $this->assertFileDoesNotExist($this->path);
+    }
+
+    #[Test]
+    public function the_command_fails_when_the_file_cannot_be_written(): void
+    {
+        Process::fake();
+        mkdir($this->directory);
+        file_put_contents($this->directory.'/file', '');
+
+        $this->artisan('actuator:build-info', ['--path' => $this->directory.'/file/build.json'])
+            ->expectsOutputToContain('Could not write')
+            ->assertFailed();
     }
 
     #[Test]

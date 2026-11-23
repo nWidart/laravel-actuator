@@ -32,6 +32,13 @@ Arguments: none.
 Reads the build info file written by `php artisan actuator:build-info`. The fields follow Spring
 Boot's `build` section.
 
+If you published `config/actuator.php` before this contributor existed, add it to
+`info.contributors`:
+
+```php title="config/actuator.php"
+'build' => \Nwidart\Actuator\Info\Contributors\BuildInfoContributor::class,
+```
+
 | Argument | Type           | Default           | Description               |
 | -------- | -------------- | ----------------- | ------------------------- |
 | `path`   | string or null | `info.build.path` | The build info file to read. |

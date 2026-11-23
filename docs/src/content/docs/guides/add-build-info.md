@@ -7,6 +7,13 @@ The built-in `git` contributor reads the `.git` directory. Many deployments do n
 images, Laravel Vapor, or artifacts built in CI. Write the build data to a file at build time
 instead. The built-in `build` contributor shows it, and the `git` contributor falls back to it.
 
+If you published `config/actuator.php` before this contributor existed, add it to
+`info.contributors`:
+
+```php title="config/actuator.php"
+'build' => \Nwidart\Actuator\Info\Contributors\BuildInfoContributor::class,
+```
+
 ## Write the build info file
 
 Run the command at build time:

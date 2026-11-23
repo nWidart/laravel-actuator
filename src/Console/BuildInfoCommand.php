@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Console;
 
+use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Process;
 use Nwidart\Actuator\Info\BuildInfo;
+use RuntimeException;
 
 final class BuildInfoCommand extends Command
 {
@@ -26,16 +28,16 @@ final class BuildInfoCommand extends Command
 
         $branch = $this->stringOption('branch') ?? $this->git('rev-parse --abbrev-ref HEAD');
 
-        $written = $file->write([
-            'version' => $this->stringOption('build-version') ?? $this->git('describe --tags --always'),
-            'time' => $this->stringOption('time') ?? Date::now()->utc()->toIso8601ZuluString(),
-            'commit' => $this->stringOption('commit') ?? $this->git('rev-parse HEAD'),
-            // A detached HEAD has no branch.
-            'branch' => $branch === 'HEAD' ? null : $branch,
-        ]);
-
-        if (! $written) {
-            $this->components->error("Could not write {$file->path}.");
+        try {
+            $file->write([
+                'version' => $this->stringOption('build-version') ?? $this->git('describe --tags --always'),
+                'time' => $this->stringOption('time') ?? Date::now()->utc()->toIso8601ZuluString(),
+                'commit' => $this->stringOption('commit') ?? $this->git('rev-parse HEAD'),
+                // A detached HEAD has no branch.
+                'branch' => $branch === 'HEAD' ? null : $branch,
+            ]);
+        } catch (RuntimeException $e) {
+            $this->components->error($e->getMessage());
 
             return self::FAILURE;
         }
@@ -57,7 +59,13 @@ final class BuildInfoCommand extends Command
      */
     private function git(string $arguments): ?string
     {
-        $result = Process::path(base_path())->run('git '.$arguments);
+        try {
+            $result = Process::path(base_path())->run('git '.$arguments);
+        } catch (Exception) {
+            // For example when proc_open is disabled.
+            return null;
+        }
+
         $output = trim($result->output());
 
         return $result->successful() && $output !== '' ? $output : null;
