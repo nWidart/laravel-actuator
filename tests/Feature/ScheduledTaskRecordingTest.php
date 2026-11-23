@@ -371,17 +371,19 @@ final class ScheduledTaskRecordingTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Closure(): bool}>
+     * @return iterable<string, array{Closure(): bool, int}>
      */
     public static function failedWrites(): iterable
     {
-        yield 'a put that throws' => [fn (): bool => throw new RuntimeException('Connection timed out')];
-        yield 'a put that returns false' => [fn (): bool => false];
+        // A tick, then STARTED and SUCCESS twice: five writes.
+        yield 'a put that throws stops the writes' => [fn (): bool => throw new RuntimeException('Connection timed out'), 1];
+        // MySQL's upsert reports 0 rows for an identical row, so DatabaseStore returns false.
+        yield 'a put that returns false keeps writing' => [fn (): bool => false, 5];
     }
 
     #[Test]
     #[DataProvider('failedWrites')]
-    public function writes_stop_for_the_process_after_one_fails(Closure $put): void
+    public function only_a_write_that_throws_stops_the_writes_for_the_process(Closure $put, int $puts): void
     {
         $store = new class($put) extends ArrayStore
         {
@@ -407,12 +409,11 @@ final class ScheduledTaskRecordingTest extends TestCase
         $this->useStore($store);
         $this->schedule->call(fn () => null)->everyMinute()->description('Prune');
 
-        // A tick, then STARTED and SUCCESS twice: one write is tried, the others are skipped.
         $this->startCommand('schedule:run');
         $this->artisan('schedule:run')->assertExitCode(0);
         $this->artisan('schedule:run')->assertExitCode(0);
 
-        $this->assertSame(1, $store->puts);
+        $this->assertSame($puts, $store->puts);
     }
 
     #[Test]
@@ -439,7 +440,7 @@ final class ScheduledTaskRecordingTest extends TestCase
 
         $this->assertTrue($ran);
         $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
-        Log::shouldHaveReceived('warning')->with('Scheduler record could not be written: the store rejected the entry. Recording stops for this process.', [])->once();
+        Log::shouldHaveReceived('warning')->with('Scheduler record could not be written: the store rejected the entry.', [])->once();
     }
 
     /**

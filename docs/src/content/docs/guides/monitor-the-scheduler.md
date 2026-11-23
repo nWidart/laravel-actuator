@@ -25,10 +25,11 @@ instances. The web instances never see a tick, so the indicator reports `DOWN` a
 no `lastExecution`. Use `redis`, `database` or `memcached`.
 :::
 
-Recording is on by default. A store that fails never stops a task. After the first failed write,
-`schedule:run` logs a warning and writes no more records until it ends. The next `schedule:run`, a
-minute later, tries again. A store that hangs until its timeout delays the tasks only once per
-minute.
+Recording is on by default. A store that fails never stops a task. When a write throws, for
+example on a connection timeout, the process logs a warning and writes no more records for the rest
+of its life. A new process tries again: cron and `schedule:work` start a new `schedule:run` process
+every minute, so a store that hangs until its timeout delays the tasks once per minute at most. A
+write that the store rejects without an error logs a warning once, and recording goes on.
 
 ## Turn on the indicator
 

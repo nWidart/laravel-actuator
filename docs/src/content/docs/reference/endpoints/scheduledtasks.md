@@ -67,15 +67,16 @@ Spring Boot's (3.4 and later):
 | `ERROR`   | The task threw an exception, or a command exited with another code. For a command that exits with another code, the exception is `Exception` with the message `Scheduled command [<name>] failed with exit code [<code>]`. `<name>` is the command without its arguments, such as `report:send`. |
 
 A task that the scheduler skips, for example because its `when()` filter fails or it overlaps another run, keeps its last
-execution. One case differs on Laravel 12: when another server takes the `withoutOverlapping()` lock
+execution. One case differs on Laravel 12: when another process takes the `withoutOverlapping()` lock
 just after the scheduler checked it, the skipped run is recorded as `SUCCESS`. Laravel 13 marks such
 a run as skipped, so it keeps the last execution. A record expires after 7 days without a run, so a removed task leaves no record behind.
 
 The scheduler and the web instances must share the store. Set it with
 [`scheduler.store`](/laravel-actuator/reference/configuration/#scheduler). The `file` and `array`
 stores do not work when the scheduler runs on another host. A store that fails never fails a task.
-After the first failed write, `schedule:run` logs a warning and writes no more records until it
-ends. The next `schedule:run` tries again. A store that cannot be read logs a warning, and the
+When a write throws, the process logs a warning and writes no more records for the rest of its
+life. A new process, such as the next `schedule:run`, tries again. A write that the store rejects
+without an error logs a warning once, and recording goes on. A store that cannot be read logs a warning, and the
 endpoint answers without `lastExecution`.
 
 A task is recorded under its [target](#targets). Two tasks with the same target share one record:

@@ -23,9 +23,11 @@ use Throwable;
  * secret. Two tasks with the same target share a record.
  *
  * Writes and endpoint reads never throw: a store that fails is logged once per kind and skipped,
- * so it never fails a scheduled task, "schedule:run" or the endpoint. After a write fails, the
- * process writes no more: a store that hangs until its timeout would otherwise delay each task.
- * "schedule:work" starts a new "schedule:run" process every minute, which tries again.
+ * so it never fails a scheduled task, "schedule:run" or the endpoint. After a write throws, the
+ * process writes no more for the rest of its life: a store that hangs until its timeout would
+ * otherwise delay each task. A new process tries again: "schedule:work" and cron start a new
+ * "schedule:run" process every minute. A write the store rejects (put() returns false) is only
+ * logged: the database store returns false on MySQL when another server wrote the same row.
  *
  * @internal
  *
@@ -49,8 +51,9 @@ final class SchedulerStore
     private const MESSAGE_LENGTH = 1000;
 
     /**
-     * The kinds of problem already logged ("read", "write"), once per process, like HealthEndpoint.
-     * A logged "write" also turns writes off for the rest of the process.
+     * The kinds of problem already logged ("read", "write", "rejected"), once per process, like
+     * HealthEndpoint. A logged "write", a write that threw, also turns writes off for the rest of
+     * the process.
      *
      * @var array<string, true>
      */
@@ -177,7 +180,7 @@ final class SchedulerStore
         try {
             // A store can also reject an entry without throwing.
             if (! self::store()->put($key, $value, $ttl)) {
-                self::warnOnce('write', 'Scheduler record could not be written: the store rejected the entry. Recording stops for this process.');
+                self::warnOnce('rejected', 'Scheduler record could not be written: the store rejected the entry.');
             }
         } catch (Throwable $exception) {
             self::warnOnce('write', "Scheduler record could not be written: {$exception->getMessage()}. Recording stops for this process.", $exception);
