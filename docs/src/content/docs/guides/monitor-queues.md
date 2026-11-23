@@ -106,6 +106,37 @@ ACTUATOR_HEALTH_CACHE_TTL=5
 
 See [`health.cache`](/laravel-actuator/reference/configuration/#healthcache).
 
+## Export queue gauges
+
+To graph the backlog and alert on it in Prometheus, export the watched queues as gauges of the
+`prometheus` endpoint:
+
+```ini title=".env"
+ACTUATOR_QUEUE_METRICS=true
+```
+
+`laravel_queue_size` has the size of each queue of `queue.queues`, and `laravel_queue_jobs` its
+pending, delayed and reserved jobs. `laravel_queue_failed_jobs` counts the failed jobs. See
+[queue metrics](/laravel-actuator/reference/metrics/#queues).
+
+Each scrape counts every queue again: the health cache does not apply. On the `database` driver,
+that is a `COUNT(*)` on the jobs table for each queue and state. A queue that cannot be read loses
+only its own series. A connection that hangs holds the whole scrape, and past `scrape_timeout`
+every metric of the instance is missing. Keep the connect timeouts of your queue connections short.
+
+A Prometheus alert when a queue stays above 1,000 jobs for 10 minutes:
+
+```yaml title="alerts.yml"
+groups:
+  - name: laravel
+    rules:
+      - alert: QueueBacklog
+        expr: max by (connection, queue) (laravel_queue_size) > 1000
+        for: 10m
+        annotations:
+          summary: "{{ $labels.queue }} on {{ $labels.connection }} holds {{ $value }} jobs"
+```
+
 ## Check the indicators
 
 ```bash

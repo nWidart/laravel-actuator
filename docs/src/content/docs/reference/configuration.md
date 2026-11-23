@@ -30,6 +30,7 @@ Keys you do not publish keep their default values.
 | `health.cache.store`             | string                  | `'file'`                                 | `ACTUATOR_HEALTH_CACHE_STORE`  |
 | `health.metrics`                 | bool                    | `false`                                  | `ACTUATOR_HEALTH_METRICS`      |
 | `queue.queues`                   | map of lists of strings | `[]`                                     |                                |
+| `queue.metrics`                  | bool                    | `false`                                  | `ACTUATOR_QUEUE_METRICS`       |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
 | `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
@@ -260,12 +261,19 @@ database, cache and Redis connections short.
 ```php
 'queue' => [
     'queues' => [],
+    'metrics' => env('ACTUATOR_QUEUE_METRICS', false),
 ],
 ```
 
-| Key      | Description                                                                          |
-| -------- | ------------------------------------------------------------------------------------ |
-| `queues` | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set. Empty, the default, watches the default queue of the default connection. Each connection needs at least one queue name. Any other shape makes the indicator `DOWN` with an `InvalidArgumentException`. |
+| Key       | Description                                                                          |
+| --------- | ------------------------------------------------------------------------------------ |
+| `queues`  | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set, and the queue gauges export them. Empty, the default, watches the default queue of the default connection. Each connection needs at least one queue name. Any other shape makes the indicator `DOWN` with an `InvalidArgumentException`, and leaves `laravel.queue.size` and `laravel.queue.jobs` out with a warning in the log. |
+| `metrics` | Export the [queue gauges](/laravel-actuator/reference/metrics/#queues) of the `prometheus` endpoint: the size of each queue of `queues`, its jobs by state, and the failed jobs. `false`, the default, registers nothing. A published configuration without the key is off too. |
+
+With `metrics` on, each scrape counts the jobs of every queue of `queues`. On the `database` driver,
+that is a `COUNT(*)` on the jobs table for each queue and state. A queue connection that hangs
+holds the whole scrape: keep its connect timeout short. Under Octane, the gauges and their list of
+queues are set when the worker starts: restart Octane after a change.
 
 See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
 

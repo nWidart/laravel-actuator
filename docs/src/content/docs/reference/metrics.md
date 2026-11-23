@@ -138,6 +138,48 @@ groups:
           summary: "{{ $labels.component }} is DOWN on {{ $labels.instance }}"
 ```
 
+## Queues
+
+| Metric                      | Type  | Prometheus name             | Attributes                     |
+| --------------------------- | ----- | --------------------------- | ------------------------------ |
+| `laravel.queue.size`        | Gauge | `laravel_queue_size`        | `connection`, `queue`          |
+| `laravel.queue.jobs`        | Gauge | `laravel_queue_jobs`        | `connection`, `queue`, `state` |
+| `laravel.queue.failed.jobs` | Gauge | `laravel_queue_failed_jobs` |                                |
+
+The backlog of the queues that [`queue.queues`](/laravel-actuator/reference/configuration/#queue)
+lists, the same queues the [`queue` health indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator)
+watches. `laravel.queue.size` is the size the driver reports for each queue.
+`laravel.queue.jobs` splits it by `state`: `pending`, `delayed` and `reserved`. Only drivers that
+count them have these series: the built-in drivers since Laravel 12.20.
+`laravel.queue.failed.jobs` is the number of failed jobs the failer holds, of every connection and
+queue. It is missing when the failer cannot count them, such as the `dynamodb` failer.
+
+```text
+laravel_queue_size{connection="redis",otel_scope_name="nwidart/laravel-actuator",queue="default"} 12
+laravel_queue_jobs{connection="redis",otel_scope_name="nwidart/laravel-actuator",queue="default",state="pending"} 10
+laravel_queue_failed_jobs{otel_scope_name="nwidart/laravel-actuator"} 4
+```
+
+The gauges are read during the scrape and are never stored. Each scrape reads each queue once. A
+queue that cannot be read loses its own series, and the scrape still succeeds. Every instance reads
+the same queues: aggregate with `max`, not `sum`.
+
+They are off by default. Turn them on with
+[`queue.metrics`](/laravel-actuator/reference/configuration/#queue):
+
+```ini title=".env"
+ACTUATOR_QUEUE_METRICS=true
+```
+
+Each scrape then counts the jobs of every watched queue. On the `database` driver, that is a
+`COUNT(*)` on the jobs table for each queue and state. A queue connection that hangs holds the whole
+scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance is
+missing. Keep the connect timeouts of your queue connections short.
+
+[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) still applies: it
+turns off the series by state with `'laravel.queue.jobs' => false`, or every queue gauge with
+`'laravel.queue' => false`.
+
 ## Metrics read on export
 
 These are read during the scrape, in the process that answers it, and are never stored. They
@@ -177,8 +219,8 @@ another short-lived process, so these values would not form a series.
 ## Labels on every sample
 
 Every sample has the `otel_scope_name` label. It is `nwidart/laravel-metrics` for the metrics on
-this page, and `nwidart/laravel-actuator` for the `laravel.health.*` metrics and the meters you
-create with `MeterRegistry`.
+this page, and `nwidart/laravel-actuator` for the `laravel.health.*` and `laravel.queue.*` metrics
+and the meters you create with `MeterRegistry`.
 
 `prometheus.labels` in `config/metrics.php` adds your own labels to every sample:
 
