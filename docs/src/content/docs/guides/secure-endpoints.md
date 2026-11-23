@@ -131,7 +131,8 @@ The discovery endpoint uses it too:
 
 ## Limit the request rate
 
-Each health request runs every indicator, including a database query and a cache write. Add the
+Each health request runs every indicator, including a database query and a cache write, unless the
+[health cache](/laravel-actuator/reference/configuration/#healthcache) answers. Add the
 `throttle` middleware to limit public traffic:
 
 ```php title="config/actuator.php"

@@ -24,6 +24,19 @@ final class HealthTest extends TestCase
     }
 
     #[Test]
+    public function it_builds_each_status(): void
+    {
+        $this->assertSame(Status::Up, Health::up()->status);
+        $this->assertSame(Status::Down, Health::down()->status);
+        $this->assertSame(Status::OutOfService, Health::outOfService()->status);
+        $this->assertSame(Status::Unknown, Health::unknown()->status);
+
+        $warning = Health::warning(['usage' => 0.8]);
+        $this->assertSame(Status::Warning, $warning->status);
+        $this->assertSame(['usage' => 0.8], $warning->details);
+    }
+
+    #[Test]
     public function it_records_an_exception_as_error_detail(): void
     {
         $health = Health::down()->withException(new RuntimeException('Boom'));

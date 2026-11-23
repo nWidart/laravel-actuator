@@ -49,6 +49,43 @@ probe. Kubernetes waits for it before it runs the liveness probe:
         failureThreshold: 30
 ```
 
+## Probe workers and schedulers
+
+Pods that run `queue:work`, `horizon` or `schedule:work` have no HTTP server. Use an `exec` probe
+with `php artisan actuator:health`. It runs the same checks as the endpoint and exits `0` when the
+status maps to an HTTP 2xx, `1` otherwise:
+
+```yaml title="worker-deployment.yaml"
+spec:
+  containers:
+    - name: worker
+      image: my-app:1.4.2
+      args: ["php", "artisan", "queue:work"]
+      livenessProbe:
+        exec:
+          command: ["php", "artisan", "actuator:health", "liveness"]
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 3
+      readinessProbe:
+        exec:
+          command: ["php", "artisan", "actuator:health", "readiness"]
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 3
+```
+
+Each probe boots the application in a new PHP process, which costs more than an HTTP request. Keep
+`periodSeconds` at 30 or more, and `timeoutSeconds` above the boot time plus the slowest
+indicator. Use the same probes for a scheduler pod.
+
+The command ignores `show_details` and `show_components`, and never uses the health cache. An
+unknown group or component exits `2`. Run it by hand to see why a pod fails:
+
+```bash
+kubectl exec deploy/my-worker -- php artisan actuator:health readiness --details
+```
+
 ## Choose what readiness checks
 
 By default, `readiness` checks maintenance mode and pending migrations. Add the dependencies without which an instance
@@ -64,6 +101,23 @@ cannot serve any request, and that can fail for one instance but not the others:
 Keep `liveness` minimal. A liveness failure restarts the container, which does not fix a database
 outage. [Liveness and readiness](/laravel-actuator/concepts/liveness-and-readiness/) explains the
 trade-offs.
+
+## Cache the results
+
+The kubelet probes every pod every few seconds, and other checkers may too. When an indicator is
+slow, every probe waits for it. Reuse each result for a few seconds, in a store local to the pod:
+
+```ini title=".env"
+ACTUATOR_HEALTH_CACHE_TTL=3
+ACTUATOR_HEALTH_CACHE_STORE=file
+```
+
+Use `file` when `storage` is local to the container, `apc` when PHP-FPM has the APCu extension, or
+`array` under Octane. Never use a store shared between pods, such as `redis`: one pod would report
+the health of another.
+
+Keep the TTL below the probe's `periodSeconds`. A longer TTL keeps a stale `DOWN` and holds a
+recovered pod out of the Service.
 
 ## Take pods out of rotation with maintenance mode
 

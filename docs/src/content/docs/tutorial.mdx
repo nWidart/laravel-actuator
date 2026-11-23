@@ -98,8 +98,8 @@ curl http://127.0.0.1:8000/actuator/health
 {
   "status": "UP",
   "components": {
-    "ping": { "status": "UP" },
-    "readinessState": { "status": "UP" },
+    "ping": { "status": "UP", "details": { "duration": "PT0S" } },
+    "readinessState": { "status": "UP", "details": { "duration": "PT0S" } },
     "diskSpace": {
       "status": "UP",
       "details": {
@@ -107,14 +107,15 @@ curl http://127.0.0.1:8000/actuator/health
         "free": 213212008448,
         "threshold": 10485760,
         "path": "/home/you/actuator-demo",
-        "exists": true
+        "exists": true,
+        "duration": "PT0S"
       }
     },
     "db": {
       "status": "UP",
-      "details": { "connection": "sqlite", "database": "SQLite", "validationQuery": "select 1" }
+      "details": { "connection": "sqlite", "database": "SQLite", "validationQuery": "select 1", "duration": "PT0.001S" }
     },
-    "cache": { "status": "UP", "details": { "store": "database" } }
+    "cache": { "status": "UP", "details": { "store": "database", "duration": "PT0.002S" } }
   },
   "groups": ["liveness", "readiness"]
 }
@@ -236,7 +237,7 @@ when too many jobs wait in the `jobs` table.
    ```
 
    ```json
-   { "status": "UP", "details": { "pending": 0, "threshold": 100 } }
+   { "status": "UP", "details": { "pending": 0, "threshold": 100, "duration": "PT0.001S" } }
    ```
 
 </Steps>
@@ -263,7 +264,7 @@ Content-Type: application/json
 {
   "status": "DOWN",
   "components": {
-    "queue": { "status": "DOWN", "details": { "pending": 0, "threshold": 0 } }
+    "queue": { "status": "DOWN", "details": { "pending": 0, "threshold": 0, "duration": "PT0.001S" } }
   }
 }
 ```

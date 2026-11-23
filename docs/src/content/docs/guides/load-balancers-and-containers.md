@@ -87,6 +87,21 @@ Point external monitors, such as Oh Dear, UptimeRobot or Pingdom, at `/actuator/
 them to alert on any status other than 200. To alert on one dependency only, give it a
 [group](/laravel-actuator/guides/define-health-groups/) and monitor the group path.
 
+## Many checkers on one instance
+
+A load balancer, a container health check and an uptime monitor each call the health endpoint, on
+every instance. Each call runs every indicator, one after another. Set a short
+[health cache](/laravel-actuator/reference/configuration/#healthcache), 2 to 5 seconds, in a store
+local to the instance, so the checks reuse a recent result:
+
+```ini title=".env"
+ACTUATOR_HEALTH_CACHE_TTL=3
+ACTUATOR_HEALTH_CACHE_STORE=apc
+```
+
+The cache does not stop checks that arrive together from running a slow indicator together. Keep
+the connection and read timeouts of the checked services short.
+
 ## Laravel's `/up` route
 
 Laravel applications have a built-in `/up` health route. It returns 200 when the application boots

@@ -26,9 +26,13 @@ reuses it, and an operator who knows one knows the other.
 
 **Health semantics.**
 
-- The four statuses `UP`, `DOWN`, `OUT_OF_SERVICE` and `UNKNOWN`.
-- The default severity order, `DOWN`, `OUT_OF_SERVICE`, `UP`, `UNKNOWN`.
+- The four statuses `UP`, `DOWN`, `OUT_OF_SERVICE` and `UNKNOWN`, plus `WARNING`, which Spring Boot
+  does not define.
+- The default severity order, `DOWN`, `OUT_OF_SERVICE`, `UP`, `UNKNOWN`, with `WARNING` between
+  `OUT_OF_SERVICE` and `UP`.
 - HTTP 503 for `DOWN` and `OUT_OF_SERVICE`, HTTP 200 otherwise.
+- `health.status.order` and `health.status.http_mapping`, like `management.endpoint.health.status.order`
+  and `http-mapping`, also per group.
 - `show_details` and `show_components` with `never`, `when_authorized` and `always`.
 - Groups, with `liveness` and `readiness` for Kubernetes probes.
 - Many indicator names: `ping`, `readinessState`, `diskSpace`, `db`, `redis`.
@@ -69,6 +73,10 @@ lists what is left out.
 | Other endpoints     | `metrics`, `loggers`, `beans`, `threaddump` and more | Not built in. Write a [custom endpoint](/laravel-actuator/guides/write-a-custom-endpoint/) |
 | Separate port       | `management.server.port`                             | Same server as the application                        |
 | Configuration       | `management.*` properties                            | `config/actuator.php`                                 |
+| Status order        | Statuses missing from `status.order` are ignored     | Statuses missing from `status.order` sort after the listed ones, in default order |
+| Status HTTP mapping | A `status.http-mapping` replaces the defaults         | Unmapped statuses keep their default: 503 for `DOWN` and `OUT_OF_SERVICE`, 200 otherwise |
+| Health cache        | `cache.time-to-live` keeps whole responses in the memory of the process | `health.cache.ttl` keeps each indicator's result in a Laravel cache store, which you pick local to the instance |
+| Indicator duration  | Not reported                                         | A `duration` detail on each component, and the `laravel.health.indicator.duration` histogram |
 
 Some differences come from the platform. PHP has no dispatcher servlets, no thread dumps and no
 long-lived application context to hold a liveness state. The package maps each concept to its

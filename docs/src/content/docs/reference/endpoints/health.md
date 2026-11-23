@@ -46,7 +46,10 @@ Same as the root, without `groups`.
 | Key       | Type   | Present when                                   |
 | --------- | ------ | ---------------------------------------------- |
 | `status`  | string | Always.                                        |
-| `details` | object | Details are visible and the indicator returned at least one detail. |
+| `details` | object | Details are visible. Holds the indicator's details and `duration`. |
+
+`duration` is how long the indicator took to run, as an ISO-8601 duration with millisecond
+precision, such as `"PT0.012S"`. A `duration` detail of the indicator wins.
 
 Each entry of `components` has the component format.
 
@@ -56,12 +59,16 @@ Each entry of `components` has the component format.
 | ---------------- | ----------- | ------------- |
 | `DOWN`           | 503         | 1 (most severe) |
 | `OUT_OF_SERVICE` | 503         | 2             |
-| `UP`             | 200         | 3             |
-| `UNKNOWN`        | 200         | 4             |
+| `WARNING`        | 200         | 3             |
+| `UP`             | 200         | 4             |
+| `UNKNOWN`        | 200         | 5             |
 
 The aggregated status of the root or a group is the most severe status among its components. With
 no component, the status is `UNKNOWN`. The HTTP status follows the status of the response:
 aggregated for the root and groups, the component's own for a component path.
+
+These are the defaults. [`health.status`](/laravel-actuator/reference/configuration/#healthstatus)
+changes the order and the HTTP status codes, for the endpoint or for one group.
 
 The `status` key is computed from all components, even when they are hidden.
 
@@ -73,6 +80,13 @@ components still run.
 
 A configuration error, such as a class that does not implement `HealthIndicator` or a group that
 includes an unknown name, throws `InvalidArgumentException` and returns HTTP 500.
+
+## Cache
+
+With [`health.cache.ttl`](/laravel-actuator/reference/configuration/#healthcache) above 0, each
+indicator's result is reused for that many seconds. The root, the groups and the component paths
+share the cached results. A cached component keeps the `duration` of the run that produced it. The
+cache is off by default.
 
 ## Groups
 
@@ -112,14 +126,14 @@ With `show_details` set to `always`:
 {
   "status": "UP",
   "components": {
-    "ping": { "status": "UP" },
-    "readinessState": { "status": "UP" },
+    "ping": { "status": "UP", "details": { "duration": "PT0S" } },
+    "readinessState": { "status": "UP", "details": { "duration": "PT0S" } },
     "diskSpace": {
       "status": "UP",
-      "details": { "total": 494384795648, "free": 213212008448, "threshold": 10485760, "path": "/var/www", "exists": true }
+      "details": { "total": 494384795648, "free": 213212008448, "threshold": 10485760, "path": "/var/www", "exists": true, "duration": "PT0S" }
     },
-    "db": { "status": "UP", "details": { "connection": "mysql", "database": "MySQL", "validationQuery": "select 1" } },
-    "cache": { "status": "UP", "details": { "store": "redis" } }
+    "db": { "status": "UP", "details": { "connection": "mysql", "database": "MySQL", "validationQuery": "select 1", "duration": "PT0.003S" } },
+    "cache": { "status": "UP", "details": { "store": "redis", "duration": "PT0.001S" } }
   },
   "groups": ["liveness", "readiness"]
 }
@@ -138,7 +152,7 @@ Content-Type: application/json
   "components": {
     "db": {
       "status": "DOWN",
-      "details": { "error": "Illuminate\\Database\\QueryException: SQLSTATE[HY000] [2002] Connection refused (Connection: mysql, SQL: select 1)" }
+      "details": { "error": "Illuminate\\Database\\QueryException: SQLSTATE[HY000] [2002] Connection refused (Connection: mysql, SQL: select 1)", "duration": "PT0.012S" }
     }
   }
 }
@@ -151,5 +165,5 @@ curl http://localhost/actuator/health/db
 ```
 
 ```json
-{ "status": "UP", "details": { "connection": "mysql", "database": "MySQL", "validationQuery": "select 1" } }
+{ "status": "UP", "details": { "connection": "mysql", "database": "MySQL", "validationQuery": "select 1", "duration": "PT0.003S" } }
 ```

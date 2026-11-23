@@ -7,6 +7,7 @@ use Nwidart\Actuator\Health\Indicators\MigrationsHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\PingHealthIndicator;
 use Nwidart\Actuator\Health\Indicators\ReadinessStateHealthIndicator;
 use Nwidart\Actuator\Info\Contributors\AppInfoContributor;
+use Nwidart\Actuator\Info\Contributors\BuildInfoContributor;
 use Nwidart\Actuator\Info\Contributors\GitInfoContributor;
 use Nwidart\Actuator\Info\Contributors\OsInfoContributor;
 use Nwidart\Actuator\Info\Contributors\PhpInfoContributor;
@@ -91,25 +92,64 @@ return [
             // 'redis' => Nwidart\Actuator\Health\Indicators\RedisHealthIndicator::class,
         ],
 
+        // Severity order, most severe first, and the HTTP status code of
+        // each status. A status missing from "order" sorts after the
+        // listed ones. An unmapped status keeps its default code: 503
+        // for DOWN and OUT_OF_SERVICE, 200 otherwise.
+        'status' => [
+            // 'order' => ['DOWN', 'OUT_OF_SERVICE', 'WARNING', 'UP', 'UNKNOWN'],
+            // 'http_mapping' => ['DOWN' => 503, 'OUT_OF_SERVICE' => 503],
+        ],
+
         // Groups are reachable at /{base_path}/health/{group}. Each group
-        // may override "show_details" and "show_components".
+        // may override "show_details", "show_components" and "status":
+        // 'status' => ['order' => [...], 'http_mapping' => [...]].
         'groups' => [
             'liveness' => ['include' => ['ping']],
             'readiness' => ['include' => ['readinessState', 'migrations']],
         ],
+
+        // Reuse each indicator's result for "ttl" seconds (0 turns the
+        // cache off), so frequent probes do not run every check. 2 to 5
+        // seconds is enough. The store must be local to the instance:
+        // "apc" under PHP-FPM, "file" when storage is local to the
+        // container, "array" under Octane. A shared store, such as redis
+        // or database, would hide one instance's failure behind another's
+        // success.
+        'cache' => [
+            'ttl' => env('ACTUATOR_HEALTH_CACHE_TTL', 0),
+            'store' => env('ACTUATOR_HEALTH_CACHE_STORE', 'file'),
+        ],
+
+        // Export the health status as the gauges laravel_health_status and
+        // laravel_health_overall_status of the prometheus endpoint. Each
+        // scrape then runs every indicator unless the cache above holds its
+        // result: a hanging dependency can make the scrape time out. Turn
+        // the cache on and keep connect timeouts short.
+        'metrics' => env('ACTUATOR_HEALTH_METRICS', false),
     ],
 
     /*
     |--------------------------------------------------------------------------
     | Info endpoint
     |--------------------------------------------------------------------------
+    |
+    | "php artisan actuator:build-info" writes the build info file at build
+    | time. The "build" contributor shows it, and the "git" contributor
+    | reads its commit and branch when the .git directory is absent.
+    |
     */
 
     'info' => [
         'middleware' => [],
 
+        'build' => [
+            'path' => base_path('bootstrap/cache/actuator-build.json'),
+        ],
+
         'contributors' => [
             'app' => AppInfoContributor::class,
+            'build' => BuildInfoContributor::class,
             'git' => GitInfoContributor::class,
             'php' => PhpInfoContributor::class,
             'os' => OsInfoContributor::class,

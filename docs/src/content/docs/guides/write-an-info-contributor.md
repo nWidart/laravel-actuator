@@ -56,16 +56,17 @@ contributor entry can pass constructor arguments: `[Contributor::class, ['name' 
 
 ## Omit a section conditionally
 
-Return an empty array, and the key is left out of the response. The built-in `git` contributor does
-this when the application has no `.git` directory.
+Return an empty array, and the key is left out of the response. The built-in `build` contributor does
+this when the build info file is absent.
 
 ## Remove a built-in section
 
 Delete the entry. For example, to hide the operating system and the process:
 
-```php title="config/actuator.php" del={5-6}
+```php title="config/actuator.php" del={6-7}
 'contributors' => [
     'app' => AppInfoContributor::class,
+    'build' => BuildInfoContributor::class,
     'git' => GitInfoContributor::class,
     'php' => PhpInfoContributor::class,
     'os' => OsInfoContributor::class,

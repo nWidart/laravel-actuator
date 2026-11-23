@@ -3,7 +3,7 @@ title: Built-in metrics
 description: Every metric that Laravel Actuator serves without code, with its type, Prometheus name and switch.
 ---
 
-The built-in metrics come from [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
+Most built-in metrics come from [nwidart/laravel-metrics](https://github.com/nWidart/laravel-metrics#readme),
 which Laravel Actuator requires. They use the names of the OpenTelemetry semantic conventions. The
 [laravel-metrics documentation](https://nwidart.github.io/laravel-metrics/reference/metrics/http/)
 has a page per metric, with its attributes and what it leaves out. This page sums them up.
@@ -11,7 +11,7 @@ has a page per metric, with its attributes and what it leaves out. This page sum
 The Switch column names the key of `config/metrics.php`, under `instrumentation`, that turns a
 group of metrics off, with its environment variable. `php artisan vendor:publish --tag=metrics-config`
 publishes that file. The [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable)
-key of `config/actuator.php` does not apply to these metrics.
+key of `config/actuator.php` does not apply to the metrics of laravel-metrics.
 
 ## Recorded metrics
 
@@ -63,6 +63,81 @@ indicator runs are recorded in `db.client.operation.duration` and `laravel.cache
 The histograms have buckets out of the box: 5 ms to 10 s for requests and jobs, 1 ms to 10 s for
 queries, and 100 ms to 15 min for scheduled tasks.
 
+## Recorded by Laravel Actuator
+
+| Metric                              | Type      | Prometheus name                             | Attributes  |
+| ----------------------------------- | --------- | ------------------------------------------- | ----------- |
+| `laravel.health.indicator.duration` | Histogram | `laravel_health_indicator_duration_seconds` | `indicator` |
+
+The time each health indicator takes to run, with the indicator's name in `indicator`. It is
+recorded each time an indicator runs, not when the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+answers. It has the `otel_scope_name` label `nwidart/laravel-actuator`.
+
+It is recorded through `MeterRegistry`, so the keys of `config/actuator.php` apply:
+[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) turns it off, with
+`'laravel.health' => false`, and
+[`metrics.distribution.slo`](/laravel-actuator/reference/configuration/#metricsdistributionslo)
+sets its buckets. Without buckets, it keeps only its count and sum.
+
+## Health status
+
+| Metric                          | Type  | Prometheus name                 | Attributes            |
+| ------------------------------- | ----- | ------------------------------- | --------------------- |
+| `laravel.health.status`         | Gauge | `laravel_health_status`         | `component`, `status` |
+| `laravel.health.overall.status` | Gauge | `laravel_health_overall_status` | `status`              |
+
+The health status, so that you can alert on health from the metrics you already scrape.
+`laravel.health.status` has a series for each configured health indicator, named in `component`,
+and each status: `DOWN`, `OUT_OF_SERVICE`, `WARNING`, `UP` and `UNKNOWN`. A series is 1 for the
+current status and 0 for the others, so no series disappears when a status changes.
+`laravel.health.overall.status` has the same series for the status of the whole application, the
+status of `/actuator/health`.
+
+```text
+laravel_health_status{component="db",otel_scope_name="nwidart/laravel-actuator",status="DOWN"} 0
+laravel_health_status{component="db",otel_scope_name="nwidart/laravel-actuator",status="UP"} 1
+laravel_health_overall_status{otel_scope_name="nwidart/laravel-actuator",status="UP"} 1
+```
+
+The application status has its own gauge, rather than a reserved `component` value, so that a sum
+or a count over `laravel_health_status` covers only indicators, and so that you can turn the
+component series off and keep the application status.
+
+The gauges are read during the scrape and are never stored. Every indicator is in them, whatever
+`show_details` and `show_components` say: protect the `prometheus` endpoint instead. An indicator
+that throws or cannot be resolved is `DOWN`, and the scrape still succeeds.
+
+They are off by default. Turn them on with
+[`health.metrics`](/laravel-actuator/reference/configuration/#healthmetrics):
+
+```ini title=".env"
+ACTUATOR_HEALTH_METRICS=true
+ACTUATOR_HEALTH_CACHE_TTL=5
+```
+
+Each scrape runs every indicator once, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+holds its result. An indicator that hangs, such as a database that does not answer, holds the
+whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance
+is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
+database, cache and Redis connections short.
+
+[`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) still applies: it
+turns off only the component series with `'laravel.health.status' => false`, or both gauges and
+the duration histogram with `'laravel.health' => false`.
+
+A Prometheus alert when an indicator is down for 2 minutes:
+
+```yaml title="alerts.yml"
+groups:
+  - name: laravel
+    rules:
+      - alert: HealthIndicatorDown
+        expr: laravel_health_status{status="DOWN"} == 1
+        for: 2m
+        annotations:
+          summary: "{{ $labels.component }} is DOWN on {{ $labels.instance }}"
+```
+
 ## Metrics read on export
 
 These are read during the scrape, in the process that answers it, and are never stored. They
@@ -102,7 +177,8 @@ another short-lived process, so these values would not form a series.
 ## Labels on every sample
 
 Every sample has the `otel_scope_name` label. It is `nwidart/laravel-metrics` for the metrics on
-this page, and `nwidart/laravel-actuator` for the meters you create with `MeterRegistry`.
+this page, and `nwidart/laravel-actuator` for the `laravel.health.*` metrics and the meters you
+create with `MeterRegistry`.
 
 `prometheus.labels` in `config/metrics.php` adds your own labels to every sample:
 

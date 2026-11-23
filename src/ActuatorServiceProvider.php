@@ -7,8 +7,11 @@ namespace Nwidart\Actuator;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Support\ServiceProvider;
+use Nwidart\Actuator\Console\BuildInfoCommand;
 use Nwidart\Actuator\Console\ClearMetricsCommand;
+use Nwidart\Actuator\Console\HealthCommand;
 use Nwidart\Actuator\Endpoints\EndpointRegistry;
+use Nwidart\Actuator\Health\HealthGauges;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Metrics\AttributeContributors;
 use Nwidart\Metrics\Metrics;
@@ -48,7 +51,7 @@ final class ActuatorServiceProvider extends ServiceProvider
                 __DIR__.'/../config/actuator.php' => config_path('actuator.php'),
             ], 'actuator-config');
 
-            $this->commands([ClearMetricsCommand::class]);
+            $this->commands([BuildInfoCommand::class, ClearMetricsCommand::class, HealthCommand::class]);
         }
 
         $this->app->make(EndpointRegistry::class)->loadRoutes();
@@ -67,6 +70,7 @@ final class ActuatorServiceProvider extends ServiceProvider
         // (callAfterResolving). Build it on every request, so that they exist in the scrape and in
         // the requests they tag. It holds no meter until one is used.
         $registry = $this->app->make(MeterRegistry::class);
+        HealthGauges::register($this->app, $registry, $this->app->make(Metrics::class));
 
         // A meter turned off by an "enable" prefix also stops serving the series it stored before.
         if (config()->array('actuator.metrics.enable', []) !== []) {

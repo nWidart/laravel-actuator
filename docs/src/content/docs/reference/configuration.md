@@ -23,9 +23,15 @@ Keys you do not publish keep their default values.
 | `health.show_details`            | visibility              | `'never'`                                | `ACTUATOR_HEALTH_SHOW_DETAILS` |
 | `health.show_components`         | visibility or `null`    | `null`                                   |                                |
 | `health.indicators`              | map of definitions      | `ping`, `readinessState`, `diskSpace`, `db`, `migrations`, `cache` |      |
+| `health.status.order`            | list of status codes    | `DOWN`, `OUT_OF_SERVICE`, `WARNING`, `UP`, `UNKNOWN` |                    |
+| `health.status.http_mapping`     | map of status to int    | `[]`                                     |                                |
 | `health.groups`                  | map of groups           | `liveness`, `readiness`                  |                                |
+| `health.cache.ttl`               | int (seconds)           | `0`                                      | `ACTUATOR_HEALTH_CACHE_TTL`    |
+| `health.cache.store`             | string                  | `'file'`                                 | `ACTUATOR_HEALTH_CACHE_STORE`  |
+| `health.metrics`                 | bool                    | `false`                                  | `ACTUATOR_HEALTH_METRICS`      |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
-| `info.contributors`              | map of definitions      | `app`, `git`, `php`, `os`, `process`     |                                |
+| `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
+| `info.contributors`              | map of definitions      | `app`, `build`, `git`, `php`, `os`, `process` |                           |
 | `env.middleware`                 | list of strings         | `[]`                                     |                                |
 | `env.show_values`                | visibility              | `'never'`                                |                                |
 | `mappings.middleware`            | list of strings         | `[]`                                     |                                |
@@ -95,7 +101,9 @@ Unknown IDs are ignored. The discovery endpoint is always registered.
     'show_details' => env('ACTUATOR_HEALTH_SHOW_DETAILS', 'never'),
     'show_components' => null,
     'indicators' => [/* ... */],
+    'status' => [/* ... */],
     'groups' => [/* ... */],
+    'cache' => [/* ... */],
 ],
 ```
 
@@ -137,6 +145,31 @@ The order of the map is the order of the components in the response. See the
 [health indicators reference](/laravel-actuator/reference/health-indicators/) for each built-in
 indicator.
 
+### `health.status`
+
+How statuses aggregate and which HTTP status code each one returns.
+
+```php
+'status' => [
+    'order' => ['DOWN', 'OUT_OF_SERVICE', 'WARNING', 'UP', 'UNKNOWN'],
+    'http_mapping' => ['WARNING' => 207, 'DOWN' => 500],
+],
+```
+
+| Key            | Type                 | Description                                                                 |
+| -------------- | -------------------- | --------------------------------------------------------------------------- |
+| `order`        | list of status codes | Severity order, most severe first. A status missing from the list sorts after the listed ones, in default order. |
+| `http_mapping` | map of status to int | HTTP status code for each status. An unmapped status keeps its default: 503 for `DOWN` and `OUT_OF_SERVICE`, 200 otherwise. |
+
+Both keys are commented out by default. Status codes are case-insensitive. These throw
+`InvalidArgumentException` on the next request, with a message that names the config key:
+
+- An unknown status code.
+- A status code listed twice, in any case, such as `'down'` and `'DOWN'`.
+- An `order` that is not a list.
+- An `http_mapping` that is not an array.
+- An HTTP status code that is not an integer from 200 to 599.
+
 ### `health.groups`
 
 Map of group name to group settings.
@@ -153,16 +186,82 @@ Map of group name to group settings.
 | `include`         | list of strings      | Indicator names checked by the group. Each must be a key of `indicators`. |
 | `show_details`    | visibility or `null` | Overrides `health.show_details` for this group.                     |
 | `show_components` | visibility or `null` | Overrides `health.show_components` for this group.                  |
+| `status`          | map                  | `order` and `http_mapping`. Each key overrides the same key of `health.status` for this group. |
 
 An unknown name in `include` throws `InvalidArgumentException` when the group is requested.
+
+### `health.cache`
+
+Reuse each indicator's result for a few seconds, so that frequent probes do not run every check.
+This is Spring Boot's `management.endpoint.health.cache.time-to-live`.
+
+```php
+'cache' => [
+    'ttl' => env('ACTUATOR_HEALTH_CACHE_TTL', 0),
+    'store' => env('ACTUATOR_HEALTH_CACHE_STORE', 'file'),
+],
+```
+
+| Key     | Type          | Description                                                                         |
+| ------- | ------------- | ----------------------------------------------------------------------------------- |
+| `ttl`   | int (seconds) | How long a result is reused. `0`, the default, turns the cache off. A value that is not a whole number of seconds, 0 or more, logs a warning and turns the cache off. |
+| `store` | string        | The Laravel cache store that keeps the results. It must be local to the instance. `null` or an empty string is `file`, never the default store. |
+
+Results are kept per indicator name and definition: the whole endpoint, its groups and its
+components share one entry, and a changed class or constructor argument is a new entry. The
+`duration` detail of a cached result is the duration of the run that produced it.
+
+The store must never be shared between instances. A result from a shared store, such as `redis` or
+`database`, is the result of whichever instance ran the indicator last, so one instance's failure
+hides behind another's success. Pick the store for your runtime:
+
+| Runtime                                   | Store   |
+| ----------------------------------------- | ------- |
+| PHP-FPM, with the APCu extension          | `apc`   |
+| Storage local to the container or server  | `file`  |
+| Octane (one cache per worker)             | `array` |
+
+Do not use `array` under PHP-FPM: it lives for one request, so nothing is reused. Do not use `file`
+when several servers share the `storage` directory.
+
+A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
+and a warning is logged, once per request under PHP-FPM, once per worker under Octane. A result the store cannot serialize is answered without being cached. A published file
+without a `cache` key keeps the cache off.
+
+The cache cuts repeated runs while the checks are fast. Probes that arrive while a slow check runs
+all miss the cache and run the check too. Keep the connection and read timeouts of the checked
+services short.
+
+Keep the TTL short, 2 to 5 seconds. A longer one keeps a stale `DOWN` and holds the instance out
+of traffic after it recovered. See [Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/#cache-the-results).
+
+### `health.metrics`
+
+Export the health status as the [health status gauges](/laravel-actuator/reference/metrics/#health-status)
+of the `prometheus` endpoint. `false`, the default, registers nothing. A published configuration
+without the key is off too.
+
+```php
+'metrics' => env('ACTUATOR_HEALTH_METRICS', false),
+```
+
+Each scrape runs every indicator once, unless the [health cache](/laravel-actuator/reference/configuration/#healthcache)
+holds its result. An indicator that hangs, such as a database that does not answer, holds the
+whole scrape: past Prometheus' `scrape_timeout`, the scrape fails and every metric of the instance
+is missing until it recovers. Turn the health cache on, and keep the connect timeouts of your
+database, cache and Redis connections short.
 
 ## `info`
 
 ```php
 'info' => [
     'middleware' => [],
+    'build' => [
+        'path' => base_path('bootstrap/cache/actuator-build.json'),
+    ],
     'contributors' => [
         'app' => AppInfoContributor::class,
+        'build' => BuildInfoContributor::class,
         'git' => GitInfoContributor::class,
         'php' => PhpInfoContributor::class,
         'os' => OsInfoContributor::class,
@@ -174,6 +273,7 @@ An unknown name in `include` throws `InvalidArgumentException` when the group is
 | Key            | Description                                                                         |
 | -------------- | ----------------------------------------------------------------------------------- |
 | `middleware`   | Middleware added after the shared `middleware`.                                     |
+| `build.path`   | The build info file. `php artisan actuator:build-info` writes it; the `build` and `git` contributors read it. |
 | `contributors` | Map of response key to contributor [definition](#definitions). The class must implement `Nwidart\Actuator\Info\InfoContributor`. |
 
 See the [info contributors reference](/laravel-actuator/reference/info-contributors/).
@@ -227,7 +327,10 @@ The middleware added after the shared `middleware` on the
 ```
 
 These keys apply only to the meters you create with
-[`MeterRegistry`](/laravel-actuator/reference/php-api/#meterregistry). The built-in metrics are
+[`MeterRegistry`](/laravel-actuator/reference/php-api/#meterregistry), and to
+[`laravel.health.indicator.duration`](/laravel-actuator/reference/metrics/#recorded-by-laravel-actuator)
+and the [health status gauges](/laravel-actuator/reference/metrics/#health-status), which Laravel
+Actuator records through it. The other built-in metrics are
 switched in `instrumentation` of `config/metrics.php`. See the
 [built-in metrics](/laravel-actuator/reference/metrics/).
 

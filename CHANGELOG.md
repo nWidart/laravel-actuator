@@ -2,6 +2,29 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- A `WARNING` health status, for a check that is degraded but still working, and `Health::warning()`. It answers HTTP 200. The default severity order is `DOWN`, `OUT_OF_SERVICE`, `WARNING`, `UP`, `UNKNOWN`.
+- `health.status.order` sets the severity order, most severe first, and `health.status.http_mapping` sets the HTTP status code of a status, such as `'WARNING' => 207`. A group overrides either with its own `status` key. Status codes are case-insensitive. An unknown status, a status listed twice or an HTTP status code outside 200 to 599 throws `InvalidArgumentException`. See the [health model](https://nwidart.github.io/laravel-actuator/concepts/health-model/).
+- A health result cache: with `health.cache.ttl` above 0, each indicator's result is reused for that many seconds, in the cache store `health.cache.store` (`file` by default). The root, the groups and the component paths share the results. It is off by default. Use a store local to the instance, never a shared one such as Redis. See [Cache the results](https://nwidart.github.io/laravel-actuator/guides/kubernetes-probes/#cache-the-results).
+- When details are shown, each component has a `duration` detail: how long its indicator took, as an ISO-8601 duration such as `PT0.012S`.
+- The histogram `laravel.health.indicator.duration` (`laravel_health_indicator_duration_seconds`), with the indicator's name in `indicator`, recorded each time an indicator runs. `'laravel.health' => false` in `metrics.enable` turns it off, and the health status gauges too.
+- The gauges `laravel.health.status`, with a series per indicator (`component`) and status, and `laravel.health.overall.status`, with a series per status for the whole application. A series is 1 for the current status and 0 for the others, so `laravel_health_status{status="DOWN"} == 1` alerts on a failing indicator. They are off by default: turn them on with `health.metrics` (`ACTUATOR_HEALTH_METRICS=true`). Each scrape then runs every indicator unless the health cache holds its result, so turn the cache on and keep connect timeouts short. `'laravel.health.status' => false` in `metrics.enable` turns off only the component series. See the [metrics reference](https://nwidart.github.io/laravel-actuator/reference/metrics/#health-status).
+- A Health row in the sample Grafana dashboard, from `laravel_health_overall_status` and `laravel_health_status`.
+- `php artisan actuator:health [path]` checks the health of the application, a group or a component, for `exec` probes on queue worker and scheduler pods. It exits `0` when the status maps to an HTTP 2xx, `1` otherwise, and `2` for an unknown path. `--details` prints the components and their details, `--json` the JSON of the endpoint. It shows everything whatever `show_details` and `show_components` say, and never uses the health cache. See [Probe workers and schedulers](https://nwidart.github.io/laravel-actuator/guides/kubernetes-probes/#probe-workers-and-schedulers).
+- `php artisan actuator:build-info` writes the `version`, `time`, `commit` and `branch` of the build to `info.build.path` (`bootstrap/cache/actuator-build.json` by default), from git unless `--build-version`, `--time`, `--commit`, `--branch` or `--path` are given. `BuildInfoContributor`, named `build`, shows that file in `/actuator/info`, and shows nothing without it. See the [guide](https://nwidart.github.io/laravel-actuator/guides/add-build-info/).
+- `GitInfoContributor` falls back to the commit and branch of the build info file when the `.git` directory is absent, as in most Docker images.
+- `ROADMAP.md`, with the plan to make `Status` accept any status code in 2.0.
+
+### Changed
+
+- When details are shown, every component now has a `details` object, with at least `duration`. A component without details had no `details` key before. An indicator's own `duration` detail wins. Code or tests that compare the exact JSON of the health endpoint see the new key.
+- `Status` has a new case, `Warning`. A `match` over `Status` without a default arm needs a `Status::Warning` branch.
+- The `build` contributor is in the default contributors. A published configuration keeps its own contributors: add `'build' => BuildInfoContributor::class` to `info.contributors` to get it.
+- `HealthEndpoint` takes a cache factory and the `MeterRegistry` in its constructor, and is no longer `readonly`. Resolve it from the container.
+
 ## 1.3.1 - 2026-11-23
 
 ### Changed

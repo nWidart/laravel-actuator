@@ -13,14 +13,16 @@ The separation matters. An indicator knows how to check a database. The configur
 databases to check and under which names. The same class can check three connections as three
 components.
 
-## Four statuses
+## Five statuses
 
-A boolean "healthy or not" is not enough, so there are four statuses:
+A boolean "healthy or not" is not enough, so there are five statuses:
 
 - `UP`: the component works.
 - `DOWN`: the component fails. Something is broken.
 - `OUT_OF_SERVICE`: the component works, but it must not take traffic. Nothing is broken, the state
   is intended, for example during maintenance.
+- `WARNING`: the component works, but it is degraded. For example, a disk at 80%, a certificate that
+  expires in 10 days, or a queue backlog above a soft threshold. It still takes traffic.
 - `UNKNOWN`: the indicator cannot tell.
 
 `DOWN` and `OUT_OF_SERVICE` lead to the same action from a load balancer, stop sending traffic, but
@@ -31,7 +33,7 @@ mean different things to a human. One calls for an investigation, the other for 
 The overall status of the application, or of a group, is the most severe status of its components:
 
 ```
-DOWN  >  OUT_OF_SERVICE  >  UP  >  UNKNOWN
+DOWN  >  OUT_OF_SERVICE  >  WARNING  >  UP  >  UNKNOWN
 ```
 
 So one failing component makes the whole application `DOWN`. This is pessimistic on purpose. A
@@ -41,6 +43,13 @@ checker that sees `UP` must be able to trust that every checked part works.
 an application with only `UNKNOWN` components is `UNKNOWN`. With no component at all, there is
 nothing to report, and the status is `UNKNOWN` too.
 
+`WARNING` ranks above `UP`, so one degraded component shows in the overall status, without taking the
+application out of traffic.
+
+To change the order, set
+[`health.status.order`](/laravel-actuator/reference/configuration/#healthstatus). A group can set its
+own.
+
 The consequence: only check what must work. If a component may fail while the application still
 serves users, a failure of that component should not make the whole application `DOWN`. Leave it
 out, or put it in a [group](/laravel-actuator/guides/define-health-groups/) of its own.
@@ -48,11 +57,15 @@ out, or put it in a [group](/laravel-actuator/guides/define-health-groups/) of i
 ## HTTP status codes
 
 Most health checkers do not read JSON. They read the HTTP status. The endpoint returns 503 for
-`DOWN` and `OUT_OF_SERVICE`, and 200 for `UP` and `UNKNOWN`. So a checker that only knows "200 is
-good" makes the right decision without any configuration.
+`DOWN` and `OUT_OF_SERVICE`, and 200 for `WARNING`, `UP` and `UNKNOWN`. So a checker that only knows
+"200 is good" makes the right decision without any configuration.
 
 `UNKNOWN` returns 200 for the same reason it ranks below `UP`: lack of information is not a
-failure.
+failure. `WARNING` returns 200 because a degraded component still serves users.
+
+To change the codes, set
+[`health.status.http_mapping`](/laravel-actuator/reference/configuration/#healthstatus), for example
+to return 500 for `DOWN`. A group can set its own.
 
 ## Exceptions are failures
 
@@ -61,9 +74,16 @@ and the exception message goes into the `error` detail. The other indicators sti
 check must never break the health endpoint itself, because a health endpoint that returns HTTP 500
 tells a checker nothing about which part failed.
 
-Configuration errors are different. A group that includes an unknown indicator, or a class that is
-not an indicator, is a mistake by the developer, not a runtime failure. These throw, so that the
-mistake is visible at the first request instead of hiding as a permanent `DOWN`.
+Configuration errors are different. These are mistakes by the developer, not runtime failures:
+
+- A group that includes an unknown indicator.
+- A class that is not an indicator.
+- In the `status` settings of the endpoint or of a group: an unknown status code, a status code
+  listed twice (in any case), an `order` that is not a list, an `http_mapping` that is not an array,
+  or an `http_mapping` code that is not an integer from 200 to 599.
+
+These throw, so that the mistake is visible at the first request instead of hiding as a permanent
+`DOWN`.
 
 ## Visibility: status, components, details
 
@@ -92,10 +112,34 @@ wrong?". One aggregated status cannot answer all three.
 See [liveness and readiness](/laravel-actuator/concepts/liveness-and-readiness/) for the two groups
 the package defines.
 
-## No caching
+## Duration
 
-Each request runs every indicator of the requested path. The response always reflects the current
-state, which is what probes expect. The cost is a database query and a cache round trip for each
-request. For a check that is slow or expensive, compute the result in a scheduled job and let the
-indicator read it, as described in
+Each indicator run is timed. With details shown, each component has a `duration` detail, an
+ISO-8601 duration with millisecond precision, such as `"PT0.012S"`. The same value goes into the
+[`laravel.health.indicator.duration`](/laravel-actuator/reference/metrics/#recorded-by-laravel-actuator)
+histogram, so you can see which check makes probes slow.
+
+## Caching
+
+By default, each request runs every indicator of the requested path, so the response reflects the
+current state. Probes, load balancers and monitors call it every few seconds, on every instance.
+PHP runs the indicators one after another and cannot interrupt a blocked call: one slow database
+makes every probe slow, and the probes pile up on the PHP-FPM workers.
+
+[`health.cache.ttl`](/laravel-actuator/reference/configuration/#healthcache) reuses each indicator's
+result for a few seconds. The cache is per indicator, so the endpoint, its groups and its components
+reuse the same results. A cached result keeps the `duration` of the run that produced it, and is not recorded
+in the histogram again.
+
+The cache must be local to each instance. A health check asks "does this instance work?". A result
+shared between instances answers for whichever instance ran the check last, and hides one
+instance's failure behind another's success.
+
+The cache cuts repeated runs while the checks are fast. It does not stop probes that arrive while
+a slow check runs: each one misses the cache and runs the check too. Keep the connection and read
+timeouts of the checked services short.
+
+Keep the TTL short, 2 to 5 seconds: it bounds how long a recovered instance still reports `DOWN`.
+For a check that is slow or expensive, compute the result in a scheduled job and let the indicator
+read it, as described in
 [write a custom health indicator](/laravel-actuator/guides/write-a-health-indicator/#keep-the-check-fast).

@@ -53,6 +53,7 @@ Add it to `health.indicators`. The key is the component name:
 | `Health::up($details)`          | The component works.                                             | 200  |
 | `Health::down($details)`        | The component fails.                                             | 503  |
 | `Health::outOfService($details)`| The component works but must not take traffic, for example during a planned outage. | 503  |
+| `Health::warning($details)`     | The component works but is degraded, for example a disk at 80%.  | 200  |
 | `Health::unknown($details)`     | The indicator cannot tell, for example a check that is not configured. | 200  |
 
 The HTTP status applies when this status is the most severe one. The
@@ -77,7 +78,7 @@ You do not need to catch exceptions. When `health()` throws, the component repor
 exception class and message in the `error` detail, and the package logs a warning:
 
 ```json
-{ "status": "DOWN", "details": { "error": "RuntimeException: Connection refused" } }
+{ "status": "DOWN", "details": { "error": "RuntimeException: Connection refused", "duration": "PT0.002S" } }
 ```
 
 The same happens when the container cannot build the indicator, for example when the class does
@@ -107,12 +108,16 @@ public function __construct(private PaymentGateway $gateway, private int $maxLat
 
 ## Keep the check fast
 
-Every health request runs every indicator, and probes call the endpoint every few seconds.
+Every health request runs every indicator, and probes call the endpoint every few seconds. The
+`duration` detail and the `laravel.health.indicator.duration` histogram show how long each one takes.
 
 - Set a short timeout on network calls, well below your probe timeout.
 - Avoid heavy queries. Count rows with an index, or read a cached value.
 - If a check is expensive, compute it in a scheduled job, store the result in the cache, and let the
   indicator read the cache.
+- Set a short [health cache](/laravel-actuator/reference/configuration/#healthcache), 2 to 5
+  seconds, so frequent probes reuse a recent result. It does not help while a check hangs, so the
+  timeouts still matter.
 
 ## See also
 

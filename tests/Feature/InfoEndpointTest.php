@@ -101,6 +101,18 @@ final class InfoEndpointTest extends TestCase
     }
 
     #[Test]
+    public function git_keeps_a_branch_named_0(): void
+    {
+        file_put_contents($this->git.'/HEAD', "ref: refs/heads/0\n");
+        file_put_contents($this->git.'/refs/heads/0', "0123456789abcdef0123456789abcdef01234567\n");
+
+        $this->assertSame(
+            ['branch' => '0', 'commit' => ['id' => '0123456']],
+            (new GitInfoContributor($this->git))->contribute(),
+        );
+    }
+
+    #[Test]
     public function git_falls_back_to_packed_refs(): void
     {
         file_put_contents($this->git.'/HEAD', "ref: refs/heads/main\n");
