@@ -26,9 +26,13 @@ reuses it, and an operator who knows one knows the other.
 
 **Health semantics.**
 
-- The four statuses `UP`, `DOWN`, `OUT_OF_SERVICE` and `UNKNOWN`.
-- The default severity order, `DOWN`, `OUT_OF_SERVICE`, `UP`, `UNKNOWN`.
+- The four statuses `UP`, `DOWN`, `OUT_OF_SERVICE` and `UNKNOWN`, plus `WARNING`, which Spring Boot
+  does not define.
+- The default severity order, `DOWN`, `OUT_OF_SERVICE`, `UP`, `UNKNOWN`, with `WARNING` between
+  `OUT_OF_SERVICE` and `UP`.
 - HTTP 503 for `DOWN` and `OUT_OF_SERVICE`, HTTP 200 otherwise.
+- `health.status.order` and `health.status.http_mapping`, like `management.endpoint.health.status.order`
+  and `http-mapping`, also per group.
 - `show_details` and `show_components` with `never`, `when_authorized` and `always`.
 - Groups, with `liveness` and `readiness` for Kubernetes probes.
 - Many indicator names: `ping`, `readinessState`, `diskSpace`, `db`, `redis`.

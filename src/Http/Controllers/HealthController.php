@@ -33,6 +33,6 @@ final class HealthController
     {
         $health = $endpoint->health($segments);
 
-        return $health === null ? null : new JsonResponse($health, $health['status']->httpStatus());
+        return $health === null ? null : new JsonResponse($health, $endpoint->httpStatus($segments, $health['status']));
     }
 }

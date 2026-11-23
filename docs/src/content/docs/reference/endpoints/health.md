@@ -56,12 +56,16 @@ Each entry of `components` has the component format.
 | ---------------- | ----------- | ------------- |
 | `DOWN`           | 503         | 1 (most severe) |
 | `OUT_OF_SERVICE` | 503         | 2             |
-| `UP`             | 200         | 3             |
-| `UNKNOWN`        | 200         | 4             |
+| `WARNING`        | 200         | 3             |
+| `UP`             | 200         | 4             |
+| `UNKNOWN`        | 200         | 5             |
 
 The aggregated status of the root or a group is the most severe status among its components. With
 no component, the status is `UNKNOWN`. The HTTP status follows the status of the response:
 aggregated for the root and groups, the component's own for a component path.
+
+These are the defaults. [`health.status`](/laravel-actuator/reference/configuration/#healthstatus)
+changes the order and the HTTP status codes, for the endpoint or for one group.
 
 The `status` key is computed from all components, even when they are hidden.
 

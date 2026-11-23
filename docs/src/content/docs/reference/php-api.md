@@ -47,6 +47,7 @@ An immutable health result. `details` is an `array<string, mixed>` that is encod
 | `Health::up(array $details = [])`        | Status `UP`                    |
 | `Health::down(array $details = [])`      | Status `DOWN`                  |
 | `Health::outOfService(array $details = [])` | Status `OUT_OF_SERVICE`     |
+| `Health::warning(array $details = [])`   | Status `WARNING`               |
 | `Health::unknown(array $details = [])`   | Status `UNKNOWN`               |
 
 ### Methods
@@ -71,6 +72,7 @@ enum Status: string
 {
     case Down = 'DOWN';
     case OutOfService = 'OUT_OF_SERVICE';
+    case Warning = 'WARNING';
     case Up = 'UP';
     case Unknown = 'UNKNOWN';
 }
@@ -80,8 +82,11 @@ Cases are declared from most to least severe.
 
 | Method                                         | Returns                                                     |
 | ---------------------------------------------- | ----------------------------------------------------------- |
-| `Status::aggregate(iterable $statuses): Status` | The most severe status in `$statuses`. `Unknown` when empty. |
+| `Status::aggregate(iterable $statuses, array $order = []): Status` | The most severe status in `$statuses`. `$order` lists statuses most severe first; the others follow in declaration order. `Unknown` when empty. |
 | `httpStatus(): int`                            | `503` for `Down` and `OutOfService`, `200` otherwise.       |
+
+These are the defaults. The health endpoint applies
+[`health.status`](/laravel-actuator/reference/configuration/#healthstatus) on top of them.
 
 ```php
 Status::aggregate([Status::Up, Status::OutOfService]); // Status::OutOfService

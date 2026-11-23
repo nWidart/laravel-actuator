@@ -53,6 +53,7 @@ Add it to `health.indicators`. The key is the component name:
 | `Health::up($details)`          | The component works.                                             | 200  |
 | `Health::down($details)`        | The component fails.                                             | 503  |
 | `Health::outOfService($details)`| The component works but must not take traffic, for example during a planned outage. | 503  |
+| `Health::warning($details)`     | The component works but is degraded, for example a disk at 80%.  | 200  |
 | `Health::unknown($details)`     | The indicator cannot tell, for example a check that is not configured. | 200  |
 
 The HTTP status applies when this status is the most severe one. The

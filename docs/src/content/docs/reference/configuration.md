@@ -23,6 +23,8 @@ Keys you do not publish keep their default values.
 | `health.show_details`            | visibility              | `'never'`                                | `ACTUATOR_HEALTH_SHOW_DETAILS` |
 | `health.show_components`         | visibility or `null`    | `null`                                   |                                |
 | `health.indicators`              | map of definitions      | `ping`, `readinessState`, `diskSpace`, `db`, `migrations`, `cache` |      |
+| `health.status.order`            | list of status codes    | `DOWN`, `OUT_OF_SERVICE`, `WARNING`, `UP`, `UNKNOWN` |                    |
+| `health.status.http_mapping`     | map of status to int    | `[]`                                     |                                |
 | `health.groups`                  | map of groups           | `liveness`, `readiness`                  |                                |
 | `info.middleware`                | list of strings         | `[]`                                     |                                |
 | `info.build.path`                | string                  | `base_path('bootstrap/cache/actuator-build.json')` |                      |
@@ -96,6 +98,7 @@ Unknown IDs are ignored. The discovery endpoint is always registered.
     'show_details' => env('ACTUATOR_HEALTH_SHOW_DETAILS', 'never'),
     'show_components' => null,
     'indicators' => [/* ... */],
+    'status' => [/* ... */],
     'groups' => [/* ... */],
 ],
 ```
@@ -138,6 +141,25 @@ The order of the map is the order of the components in the response. See the
 [health indicators reference](/laravel-actuator/reference/health-indicators/) for each built-in
 indicator.
 
+### `health.status`
+
+How statuses aggregate and which HTTP status code each one returns.
+
+```php
+'status' => [
+    'order' => ['DOWN', 'OUT_OF_SERVICE', 'WARNING', 'UP', 'UNKNOWN'],
+    'http_mapping' => ['WARNING' => 207, 'DOWN' => 500],
+],
+```
+
+| Key            | Type                 | Description                                                                 |
+| -------------- | -------------------- | --------------------------------------------------------------------------- |
+| `order`        | list of status codes | Severity order, most severe first. A status missing from the list sorts after the listed ones, in default order. |
+| `http_mapping` | map of status to int | HTTP status code for each status. An unmapped status keeps its default: 503 for `DOWN` and `OUT_OF_SERVICE`, 200 otherwise. |
+
+Both keys are commented out by default. An unknown status code, or an HTTP status code that is not
+an integer, throws `InvalidArgumentException` on the next request.
+
 ### `health.groups`
 
 Map of group name to group settings.
@@ -154,6 +176,7 @@ Map of group name to group settings.
 | `include`         | list of strings      | Indicator names checked by the group. Each must be a key of `indicators`. |
 | `show_details`    | visibility or `null` | Overrides `health.show_details` for this group.                     |
 | `show_components` | visibility or `null` | Overrides `health.show_components` for this group.                  |
+| `status`          | map                  | `order` and `http_mapping`. Each key overrides the same key of `health.status` for this group. |
 
 An unknown name in `include` throws `InvalidArgumentException` when the group is requested.
 

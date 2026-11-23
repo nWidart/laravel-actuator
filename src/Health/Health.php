@@ -43,6 +43,14 @@ final readonly class Health
     /**
      * @param  array<string, mixed>  $details
      */
+    public static function warning(array $details = []): self
+    {
+        return new self(Status::Warning, $details);
+    }
+
+    /**
+     * @param  array<string, mixed>  $details
+     */
     public static function unknown(array $details = []): self
     {
         return new self(Status::Unknown, $details);

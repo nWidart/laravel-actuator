@@ -92,8 +92,18 @@ return [
             // 'redis' => Nwidart\Actuator\Health\Indicators\RedisHealthIndicator::class,
         ],
 
+        // Severity order, most severe first, and the HTTP status code of
+        // each status. A status missing from "order" sorts after the
+        // listed ones. An unmapped status keeps its default code: 503
+        // for DOWN and OUT_OF_SERVICE, 200 otherwise.
+        'status' => [
+            // 'order' => ['DOWN', 'OUT_OF_SERVICE', 'WARNING', 'UP', 'UNKNOWN'],
+            // 'http_mapping' => ['DOWN' => 503, 'OUT_OF_SERVICE' => 503],
+        ],
+
         // Groups are reachable at /{base_path}/health/{group}. Each group
-        // may override "show_details" and "show_components".
+        // may override "show_details", "show_components" and "status":
+        // 'status' => ['order' => [...], 'http_mapping' => [...]].
         'groups' => [
             'liveness' => ['include' => ['ping']],
             'readiness' => ['include' => ['readinessState', 'migrations']],
