@@ -16,13 +16,19 @@ use Nwidart\Actuator\Health\HealthIndicator;
  */
 final readonly class HorizonHealthIndicator implements HealthIndicator
 {
+    /**
+     * @param  string  $repository  the Horizon interface that lists the master supervisors. Tests change it to stand for a missing Horizon.
+     */
+    public function __construct(private string $repository = MasterSupervisorRepository::class) {}
+
     public function health(): Health
     {
-        if (! interface_exists(MasterSupervisorRepository::class)) {
+        if (! interface_exists($this->repository)) {
             return Health::unknown(['error' => 'laravel/horizon is not installed']);
         }
 
-        $repository = Container::getInstance()->make(MasterSupervisorRepository::class);
+        /** @var MasterSupervisorRepository $repository */
+        $repository = Container::getInstance()->make($this->repository);
         $masters = $repository->all();
 
         $paused = array_filter($masters, static fn (mixed $master): bool => is_object($master) && ($master->status ?? null) === 'paused');

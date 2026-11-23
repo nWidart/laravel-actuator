@@ -40,6 +40,15 @@ final class HorizonHealthIndicatorTest extends TestCase
         $this->assertSame(['status' => 'paused', 'masters' => 2], $health['details']);
     }
 
+    #[Test]
+    public function without_horizon_it_is_unknown(): void
+    {
+        $health = $this->app->make(HorizonHealthIndicator::class, ['repository' => 'Laravel\\Horizon\\Contracts\\MissingRepository'])->health();
+
+        $this->assertSame(Status::Unknown, $health->status);
+        $this->assertSame(['error' => 'laravel/horizon is not installed'], $health->details);
+    }
+
     /**
      * @param  list<string>  $statuses  the status of each master supervisor
      * @return array{status: Status, details: array<string, mixed>}
