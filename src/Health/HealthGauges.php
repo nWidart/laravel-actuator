@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Health;
 
+use Illuminate\Container\Container as CurrentContainer;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Nwidart\Actuator\Metrics\MeterRegistry;
@@ -30,8 +31,6 @@ final class HealthGauges
     /** @var array{status: Status, components: array<string, Status>}|Throwable|null */
     private array|Throwable|null $statuses = null;
 
-    private function __construct(private readonly Container $container) {}
-
     /**
      * Registers the gauges when "health.metrics" is on. Nothing runs until the metrics are exported.
      */
@@ -50,7 +49,7 @@ final class HealthGauges
             return;
         }
 
-        $gauges = new self($container);
+        $gauges = new self;
 
         // Each export starts with a new evaluation. Export callbacks all run before any gauge is read.
         $metrics->onExport(static function () use ($gauges): void {
@@ -89,7 +88,9 @@ final class HealthGauges
             try {
                 // Every component, whatever "show_details" and "show_components" say: the metrics
                 // endpoint has its own protection. With the health cache on, no indicator runs again.
-                $health = $this->container->make(HealthEndpoint::class)->health(showAll: true) ?? [];
+                // Resolved from the current container, not the one of the registration: under Octane
+                // that is the request's sandbox, while the gauges live as long as the worker.
+                $health = CurrentContainer::getInstance()->make(HealthEndpoint::class)->health(showAll: true) ?? [];
                 $components = [];
                 foreach ($health['components'] ?? [] as $name => $component) {
                     if (is_array($component) && ($component['status'] ?? null) instanceof Status) {

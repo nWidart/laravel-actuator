@@ -301,9 +301,10 @@ final class HealthEndpointTest extends TestCase
         yield 'unknown status in order' => ['order', ['DOWN', 'DEGRADED'], 'Health status setting [actuator.health.status.order] contains unknown status [DEGRADED].'];
         yield 'order not a list' => ['order', 'DOWN', 'Health status setting [actuator.health.status.order] must be a list of status codes.'];
         yield 'unknown status in mapping' => ['http_mapping', ['DEGRADED' => 200], 'Health status setting [actuator.health.status.http_mapping] contains unknown status [DEGRADED].'];
-        yield 'non-int HTTP code' => ['http_mapping', ['WARNING' => '207'], 'Health status setting [actuator.health.status.http_mapping] must map [WARNING] to an integer HTTP status code from 100 to 599.'];
-        yield 'HTTP code above 599' => ['http_mapping', ['DOWN' => 5000], 'Health status setting [actuator.health.status.http_mapping] must map [DOWN] to an integer HTTP status code from 100 to 599.'];
-        yield 'HTTP code below 100' => ['http_mapping', ['DOWN' => 99], 'Health status setting [actuator.health.status.http_mapping] must map [DOWN] to an integer HTTP status code from 100 to 599.'];
+        yield 'non-int HTTP code' => ['http_mapping', ['WARNING' => '207'], 'Health status setting [actuator.health.status.http_mapping] must map [WARNING] to an integer HTTP status code from 200 to 599.'];
+        yield 'HTTP code above 599' => ['http_mapping', ['DOWN' => 5000], 'Health status setting [actuator.health.status.http_mapping] must map [DOWN] to an integer HTTP status code from 200 to 599.'];
+        yield 'informational HTTP code' => ['http_mapping', ['WARNING' => 103], 'Health status setting [actuator.health.status.http_mapping] must map [WARNING] to an integer HTTP status code from 200 to 599.'];
+        yield 'HTTP code below 100' => ['http_mapping', ['DOWN' => 99], 'Health status setting [actuator.health.status.http_mapping] must map [DOWN] to an integer HTTP status code from 200 to 599.'];
         yield 'duplicate status in order' => ['order', ['down', 'UP', 'DOWN'], 'Health status setting [actuator.health.status.order] lists [DOWN] more than once.'];
         yield 'duplicate status in mapping' => ['http_mapping', ['down' => 500, 'DOWN' => 502], 'Health status setting [actuator.health.status.http_mapping] maps [DOWN] more than once.'];
         yield 'mapping not an array' => ['http_mapping', 207, 'Health status setting [actuator.health.status.http_mapping] must map status codes to HTTP status codes.'];

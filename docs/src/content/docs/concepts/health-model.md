@@ -80,7 +80,7 @@ Configuration errors are different. These are mistakes by the developer, not run
 - A class that is not an indicator.
 - In the `status` settings of the endpoint or of a group: an unknown status code, a status code
   listed twice (in any case), an `order` that is not a list, an `http_mapping` that is not an array,
-  or an `http_mapping` code that is not an integer from 100 to 599.
+  or an `http_mapping` code that is not an integer from 200 to 599.
 
 These throw, so that the mistake is visible at the first request instead of hiding as a permanent
 `DOWN`.

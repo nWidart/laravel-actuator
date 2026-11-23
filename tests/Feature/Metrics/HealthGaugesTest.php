@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature\Metrics;
 
+use Illuminate\Container\Container;
 use Illuminate\Support\Facades\Cache;
 use Nwidart\Actuator\Tests\Fixtures\CountingHealthIndicator;
 use Nwidart\Actuator\Tests\Fixtures\FixedHealthIndicator;
@@ -238,5 +239,27 @@ final class HealthGaugesTest extends TestCase
 
         $this->assertStringContainsString(self::series('laravel_health_status', 'UP', 'counting').' 1', $this->scrape());
         $this->assertSame(1, CountingHealthIndicator::$runs);
+    }
+
+    #[Test]
+    #[DefineEnvironment('withUpAndWarningIndicators')]
+    public function the_scrape_resolves_the_indicators_from_the_current_container(): void
+    {
+        // Under Octane the gauges are registered once per worker, then each request runs in a
+        // clone of the application that Container::getInstance() points to, as Octane builds it.
+        $sandbox = clone $this->app;
+        $sandbox->instance('app', $sandbox);
+        $sandbox->instance(Container::class, $sandbox);
+        $sandbox->bind(FixedHealthIndicator::class, static fn (): FixedHealthIndicator => new FixedHealthIndicator('DOWN'));
+        Container::setInstance($sandbox);
+
+        try {
+            $metrics = $this->scrape();
+        } finally {
+            Container::setInstance($this->app);
+        }
+
+        $this->assertStringContainsString(self::series('laravel_health_status', 'DOWN', 'db').' 1', $metrics);
+        $this->assertStringContainsString(self::series('laravel_health_overall_status', 'DOWN').' 1', $metrics);
     }
 }

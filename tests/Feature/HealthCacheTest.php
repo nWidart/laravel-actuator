@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature;
 
+use Illuminate\Cache\ArrayStore;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Nwidart\Actuator\Health\HealthEndpoint;
@@ -122,6 +123,25 @@ final class HealthCacheTest extends TestCase
             ->assertJsonPath('components.unserializable.details.key', 'value');
 
         Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache could not be written for indicator [unserializable]'))->once();
+    }
+
+    #[Test]
+    public function a_store_that_rejects_a_write_logs_a_warning(): void
+    {
+        config()->set('cache.stores.rejecting', ['driver' => 'rejecting']);
+        config()->set('actuator.health.cache.store', 'rejecting');
+        Cache::extend('rejecting', fn () => Cache::repository(new class extends ArrayStore
+        {
+            public function put($key, $value, $seconds): bool
+            {
+                return false;
+            }
+        }));
+        Log::spy();
+
+        $this->getJson('/actuator/health')->assertOk();
+
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache could not be written for indicator [counting]'))->once();
     }
 
     #[Test]

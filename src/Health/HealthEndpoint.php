@@ -203,8 +203,8 @@ final class HealthEndpoint
                 throw new InvalidArgumentException("Health status setting [{$key}] maps [{$status->value}] more than once.");
             }
 
-            if (! is_int($httpStatus) || $httpStatus < 100 || $httpStatus > 599) {
-                throw new InvalidArgumentException("Health status setting [{$key}] must map [{$status->value}] to an integer HTTP status code from 100 to 599.");
+            if (! is_int($httpStatus) || $httpStatus < 200 || $httpStatus > 599) {
+                throw new InvalidArgumentException("Health status setting [{$key}] must map [{$status->value}] to an integer HTTP status code from 200 to 599.");
             }
 
             $codes[$status->value] = $httpStatus;
@@ -299,7 +299,10 @@ final class HealthEndpoint
 
         try {
             // Only plain values, never the indicator or the exception it threw.
-            $store->put($key, ['status' => $health->status->value, 'details' => $health->details, 'duration' => $seconds], $ttl);
+            // A store can also reject an entry without throwing.
+            if (! $store->put($key, ['status' => $health->status->value, 'details' => $health->details, 'duration' => $seconds], $ttl)) {
+                $this->warnOnce('write', "Health cache could not be written for indicator [{$name}]: the store rejected the entry.");
+            }
         } catch (Throwable $exception) {
             $this->warnOnce('write', "Health cache could not be written for indicator [{$name}]: {$exception->getMessage()}", $exception);
         }
@@ -319,10 +322,8 @@ final class HealthEndpoint
         }
 
         $status = Status::tryFrom($entry['status']);
-        $details = [];
-        foreach ($entry['details'] as $key => $value) {
-            $details[(string) $key] = $value;
-        }
+        /** @var array<string, mixed> $details */
+        $details = $entry['details'];
 
         return $status === null ? null : [new Health($status, $details), $entry['duration']];
     }

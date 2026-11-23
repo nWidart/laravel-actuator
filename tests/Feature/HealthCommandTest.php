@@ -140,6 +140,16 @@ final class HealthCommandTest extends TestCase
     }
 
     #[Test]
+    public function it_prints_tags_in_json_details_unchanged(): void
+    {
+        config()->set('actuator.health.indicators.fixed', [FixedHealthIndicator::class, ['details' => ['state' => '<info>degraded</info>']]]);
+
+        Artisan::call('actuator:health', ['path' => 'fixed', '--json' => true]);
+
+        $this->assertSame('<info>degraded</info>', json_decode(Artisan::output(), true, flags: JSON_THROW_ON_ERROR)['details']['state']);
+    }
+
+    #[Test]
     public function it_prints_the_same_json_as_the_endpoint(): void
     {
         config()->set('actuator.health.show_details', 'always');

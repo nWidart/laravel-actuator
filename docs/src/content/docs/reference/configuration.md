@@ -168,7 +168,7 @@ Both keys are commented out by default. Status codes are case-insensitive. These
 - A status code listed twice, in any case, such as `'down'` and `'DOWN'`.
 - An `order` that is not a list.
 - An `http_mapping` that is not an array.
-- An HTTP status code that is not an integer from 100 to 599.
+- An HTTP status code that is not an integer from 200 to 599.
 
 ### `health.groups`
 

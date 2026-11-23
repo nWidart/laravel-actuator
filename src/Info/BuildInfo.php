@@ -24,13 +24,14 @@ final readonly class BuildInfo
     }
 
     /**
-     * The non-empty values of the file. Empty when the file is absent or not valid JSON.
+     * The non-empty values of the file. Empty when the file is absent, unreadable or not valid JSON.
      *
      * @return array<'version'|'time'|'commit'|'branch', string>
      */
     public function read(): array
     {
-        $contents = is_file($this->path) ? file_get_contents($this->path) : false;
+        // An unreadable file counts as absent, as does a read that fails anyway.
+        $contents = is_file($this->path) && is_readable($this->path) ? @file_get_contents($this->path) : false;
         $data = $contents === false ? null : json_decode($contents, true);
 
         if (! is_array($data)) {

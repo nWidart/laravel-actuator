@@ -177,6 +177,34 @@ final class BuildInfoTest extends TestCase
         );
     }
 
+    #[Test]
+    public function git_keeps_a_branch_named_0_from_the_build_file(): void
+    {
+        $this->writeFile(['commit' => 'ae06613b0c', 'branch' => '0']);
+
+        $this->assertSame(
+            ['branch' => '0', 'commit' => ['id' => 'ae06613']],
+            (new GitInfoContributor('/does/not/exist'))->contribute(),
+        );
+    }
+
+    #[Test]
+    public function the_build_section_is_omitted_when_the_file_cannot_be_read(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            $this->markTestSkipped('Root reads any file.');
+        }
+
+        $this->writeFile(['version' => 'v1.4.2']);
+        chmod($this->path, 0000);
+
+        try {
+            $this->getJson('/actuator/info')->assertOk()->assertJsonMissingPath('build');
+        } finally {
+            chmod($this->path, 0600);
+        }
+    }
+
     /**
      * @param  array<string, string|null>  $data
      */

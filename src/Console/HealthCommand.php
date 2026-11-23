@@ -7,6 +7,7 @@ namespace Nwidart\Actuator\Console;
 use Illuminate\Console\Command;
 use Nwidart\Actuator\Health\HealthEndpoint;
 use Nwidart\Actuator\Health\Status;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Checks the health from the shell, for exec probes on pods without an HTTP server. Shows
@@ -36,7 +37,8 @@ final class HealthCommand extends Command
         }
 
         if ($this->option('json')) {
-            $this->line(json_encode($health, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            // Raw, so that a tag in a detail value is printed as is, not styled or stripped.
+            $this->getOutput()->writeln(json_encode($health, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
         } else {
             $this->line($health['status']->value);
 

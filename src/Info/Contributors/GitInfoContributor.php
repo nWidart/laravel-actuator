@@ -41,7 +41,7 @@ final readonly class GitInfoContributor implements InfoContributor
         return array_filter([
             'branch' => str_starts_with($ref, 'refs/heads/') ? substr($ref, 11) : $ref,
             'commit' => $commit === null ? null : ['id' => substr($commit, 0, 7)],
-        ]);
+        ], static fn (mixed $value): bool => $value !== null);
     }
 
     /**
@@ -54,7 +54,7 @@ final readonly class GitInfoContributor implements InfoContributor
         return array_filter([
             'branch' => $build['branch'] ?? null,
             'commit' => isset($build['commit']) ? ['id' => substr($build['commit'], 0, 7)] : null,
-        ]);
+        ], static fn (mixed $value): bool => $value !== null);
     }
 
     private function packedRef(string $ref): ?string
