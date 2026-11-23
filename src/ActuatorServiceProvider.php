@@ -9,6 +9,7 @@ use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Support\ServiceProvider;
 use Nwidart\Actuator\Console\BuildInfoCommand;
 use Nwidart\Actuator\Console\ClearMetricsCommand;
+use Nwidart\Actuator\Console\HealthCommand;
 use Nwidart\Actuator\Endpoints\EndpointRegistry;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Metrics\AttributeContributors;
@@ -49,7 +50,7 @@ final class ActuatorServiceProvider extends ServiceProvider
                 __DIR__.'/../config/actuator.php' => config_path('actuator.php'),
             ], 'actuator-config');
 
-            $this->commands([BuildInfoCommand::class, ClearMetricsCommand::class]);
+            $this->commands([BuildInfoCommand::class, ClearMetricsCommand::class, HealthCommand::class]);
         }
 
         $this->app->make(EndpointRegistry::class)->loadRoutes();

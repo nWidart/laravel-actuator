@@ -49,6 +49,43 @@ probe. Kubernetes waits for it before it runs the liveness probe:
         failureThreshold: 30
 ```
 
+## Probe workers and schedulers
+
+Pods that run `queue:work`, `horizon` or `schedule:work` have no HTTP server. Use an `exec` probe
+with `php artisan actuator:health`. It runs the same checks as the endpoint and exits `0` when the
+status maps to an HTTP 2xx, `1` otherwise:
+
+```yaml title="worker-deployment.yaml"
+spec:
+  containers:
+    - name: worker
+      image: my-app:1.4.2
+      args: ["php", "artisan", "queue:work"]
+      livenessProbe:
+        exec:
+          command: ["php", "artisan", "actuator:health", "liveness"]
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 3
+      readinessProbe:
+        exec:
+          command: ["php", "artisan", "actuator:health", "readiness"]
+        periodSeconds: 30
+        timeoutSeconds: 10
+        failureThreshold: 3
+```
+
+Each probe boots the application in a new PHP process, which costs more than an HTTP request. Keep
+`periodSeconds` at 30 or more, and `timeoutSeconds` above the boot time plus the slowest
+indicator. Use the same probes for a scheduler pod.
+
+The command ignores `show_details` and `show_components`, and never uses the health cache. An
+unknown group or component exits `2`. Run it by hand to see why a pod fails:
+
+```bash
+kubectl exec deploy/my-worker -- php artisan actuator:health readiness --details
+```
+
 ## Choose what readiness checks
 
 By default, `readiness` checks maintenance mode and pending migrations. Add the dependencies without which an instance

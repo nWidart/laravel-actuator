@@ -249,13 +249,29 @@ discovery is off, and adds `actuator.*` to `metrics.ignore_routes`. It binds `Me
 singleton, and builds it when the application boots, in every process. When
 [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) is not empty, it
 registers a `Metrics::exclude()` filter that leaves the meters turned off out of every export. It
-registers the `actuator:metrics:clear` command.
+registers the `actuator:health` and `actuator:metrics:clear` commands.
 
 ## Artisan commands
 
 | Command                              | Description                          |
 | ------------------------------------ | ------------------------------------ |
+| `php artisan actuator:health [path]` | Checks the health of the application, a group or a component, such as `readiness/db`. |
 | `php artisan actuator:metrics:clear` | Removes every series from the store of laravel-metrics. |
+
+`actuator:health` runs the same checks as the [health endpoint](/laravel-actuator/reference/endpoints/health/),
+for `exec` probes. It shows everything whatever `show_details` and `show_components` say, and never
+uses the health cache.
+
+| Option      | Description                                                    |
+| ----------- | -------------------------------------------------------------- |
+| `--details` | Prints the components and their details under the status.      |
+| `--json`    | Prints the same JSON as the endpoint, with every detail.       |
+
+| Exit code | Meaning                                                          |
+| --------- | ---------------------------------------------------------------- |
+| `0`       | The status maps to an HTTP 2xx, with `status.http_mapping` of the path. |
+| `1`       | The status maps to any other HTTP status.                        |
+| `2`       | The group or component does not exist.                           |
 
 ## Routes
 

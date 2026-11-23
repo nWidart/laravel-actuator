@@ -48,12 +48,14 @@ final class HealthEndpoint
     /**
      * Resolve the health for a path: [], [component], [group] or [group, component].
      * Returns null when the path does not exist or its components are hidden. Pass $cache false to
-     * run every indicator now, ignoring and leaving untouched the cached results.
+     * run every indicator now, ignoring and leaving untouched the cached results. Pass $showAll true
+     * to show the components and details whatever "show_details" and "show_components" say, for a
+     * caller that already has access, such as a console command.
      *
      * @param  list<string>  $path
      * @return array{status: Status, details?: array<string, mixed>, components?: array<string, mixed>, groups?: list<string>}|null
      */
-    public function health(array $path = [], bool $cache = true): ?array
+    public function health(array $path = [], bool $cache = true, bool $showAll = false): ?array
     {
         /** @var array<string, GroupConfig> $groups */
         $groups = $this->config->get('actuator.health.groups', []);
@@ -69,8 +71,8 @@ final class HealthEndpoint
         $members = $group === null ? array_keys($indicators) : $this->members($group['include'] ?? [], $indicators);
         $order = $this->order($groupName);
 
-        $showDetails = $this->visibility($group ?? [], 'show_details')?->isGranted() ?? false;
-        $showComponents = $this->visibility($group ?? [], 'show_components')?->isGranted() ?? $showDetails;
+        $showDetails = $showAll || ($this->visibility($group ?? [], 'show_details')?->isGranted() ?? false);
+        $showComponents = $showAll || ($this->visibility($group ?? [], 'show_components')?->isGranted() ?? $showDetails);
         $ttl = $cache ? $this->ttl() : 0;
 
         if ($path !== []) {
