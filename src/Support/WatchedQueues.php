@@ -15,6 +15,13 @@ use InvalidArgumentException;
  */
 final class WatchedQueues
 {
+    /** State => the method of the queue that counts its jobs, when the driver has it. */
+    private const COUNTS = [
+        'pending' => 'pendingSize',
+        'delayed' => 'delayedSize',
+        'reserved' => 'reservedSize',
+    ];
+
     /**
      * @param  array<mixed>|null  $queues  connection => queue names, or one queue name. Null reads "actuator.queue.queues".
      * @return array<string, list<string>>
@@ -45,5 +52,34 @@ final class WatchedQueues
         }
 
         return $watched;
+    }
+
+    /**
+     * The pending, delayed and reserved jobs of a queue, for the states the driver counts: the
+     * built-in drivers since Laravel 12.20. A state is left out when the queue declares no public
+     * method for it, as on Laravel 12.0 to 12.19 and on some third-party drivers, or when that
+     * method returns no number. Typed object, not Queue: the Queue contract declares the methods
+     * only since Laravel 12.20.
+     *
+     * @return array<'pending'|'delayed'|'reserved', int>
+     */
+    public static function counts(object $queue, string $name): array
+    {
+        $counts = [];
+
+        foreach (self::COUNTS as $state => $method) {
+            // method_exists() alone accepts a protected method, is_callable() alone any name of a __call().
+            $callable = [$queue, $method];
+            if (! method_exists($queue, $method) || ! is_callable($callable)) {
+                continue;
+            }
+
+            $count = $callable($name);
+            if (is_numeric($count)) {
+                $counts[$state] = (int) $count;
+            }
+        }
+
+        return $counts;
     }
 }

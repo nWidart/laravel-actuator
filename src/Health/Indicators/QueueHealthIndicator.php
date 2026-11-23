@@ -20,13 +20,6 @@ use Throwable;
  */
 final readonly class QueueHealthIndicator implements HealthIndicator
 {
-    /** Detail key => the method of the queue that counts it, when the driver has it. */
-    private const COUNTS = [
-        'pending' => 'pendingSize',
-        'delayed' => 'delayedSize',
-        'reserved' => 'reservedSize',
-    ];
-
     /**
      * @param  array<string, string|array<array-key, string>>|null  $queues  connection => queue names. Null reads "actuator.queue.queues"; empty watches the default queue.
      * @param  int|null  $warningThreshold  size at which a queue is WARNING. Null never is.
@@ -78,33 +71,7 @@ final readonly class QueueHealthIndicator implements HealthIndicator
     private function counts(string $connection, string $name): array
     {
         $queue = $this->queue->connection($connection);
-        $counts = ['size' => $queue->size($name)];
 
-        foreach (self::COUNTS as $key => $method) {
-            $count = self::count($queue, $method, $name);
-            if ($count !== null) {
-                $counts[$key] = $count;
-            }
-        }
-
-        return $counts;
-    }
-
-    /**
-     * What the queue's $method counts. Null when the queue declares no public $method, as on Laravel 12.0
-     * to 12.19 and on some third-party drivers, or when it returns no number. Typed object, not
-     * Queue: the Queue contract declares the method only since Laravel 12.20.
-     */
-    private static function count(object $queue, string $method, string $name): ?int
-    {
-        // method_exists() alone accepts a protected method, is_callable() alone any name of a __call().
-        $callable = [$queue, $method];
-        if (! method_exists($queue, $method) || ! is_callable($callable)) {
-            return null;
-        }
-
-        $count = $callable($name);
-
-        return is_numeric($count) ? (int) $count : null;
+        return ['size' => $queue->size($name), ...WatchedQueues::counts($queue, $name)];
     }
 }

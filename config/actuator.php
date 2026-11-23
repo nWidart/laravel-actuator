@@ -151,6 +151,13 @@ return [
 
     'queue' => [
         'queues' => [],
+
+        // Export the size of these queues and the number of failed jobs as
+        // the gauges laravel_queue_size, laravel_queue_jobs and
+        // laravel_queue_failed_jobs of the prometheus endpoint. Each scrape
+        // then counts the jobs of every queue (a query per queue and state
+        // on the database driver): keep connect timeouts short.
+        'metrics' => env('ACTUATOR_QUEUE_METRICS', false),
     ],
 
     /*
