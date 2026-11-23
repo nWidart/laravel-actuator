@@ -28,9 +28,11 @@ final class HealthEndpoint
     public const DURATION_METER = 'laravel.health.indicator.duration';
 
     /**
-     * The cache problems already logged, so that a failing store does not log a warning for each
-     * indicator of each probe. Static, so once per process: per request under PHP-FPM, per worker
-     * under Octane. A store that fails again after it recovered is not logged again.
+     * The kinds of cache problem already logged ("ttl", "config", "read", "write"), so that a
+     * failing store does not log a warning for each indicator of each probe. Static, so each kind
+     * is logged once per request under PHP-FPM, once per worker under Octane. A store that fails
+     * again after it recovered is not logged again. Kinds are apart, so a result that cannot be
+     * written never silences a store that cannot be read.
      *
      * @var array<string, true>
      */
@@ -269,13 +271,19 @@ final class HealthEndpoint
         $storeName = $this->config->get('actuator.health.cache.store');
         $storeName = $storeName === null || $storeName === '' ? 'file' : $storeName;
 
+        if (! is_string($storeName)) {
+            $this->warnOnce('config', 'Health setting [actuator.health.cache.store] must be a cache store name. The health cache is off.');
+
+            return $this->run($name, $definition);
+        }
+
         try {
-            $store = $this->cache->store(is_string($storeName) ? $storeName : throw new InvalidArgumentException('Health setting [actuator.health.cache.store] must be a cache store name.'));
+            $store = $this->cache->store($storeName);
             // The definition is part of the key, so a changed class or argument is a new entry.
             $key = "actuator:health:{$name}:".hash('xxh128', serialize($definition));
             $entry = $store->get($key);
         } catch (Throwable $exception) {
-            $this->warnOnce('store', "Health cache could not be read for indicator [{$name}]: {$exception->getMessage()}", $exception);
+            $this->warnOnce('read', "Health cache could not be read for indicator [{$name}]: {$exception->getMessage()}", $exception);
 
             return $this->run($name, $definition);
         }
@@ -291,7 +299,7 @@ final class HealthEndpoint
             // Only plain values, never the indicator or the exception it threw.
             $store->put($key, ['status' => $health->status->value, 'details' => $health->details, 'duration' => $seconds], $ttl);
         } catch (Throwable $exception) {
-            $this->warnOnce('store', "Health cache could not be written for indicator [{$name}]: {$exception->getMessage()}", $exception);
+            $this->warnOnce('write', "Health cache could not be written for indicator [{$name}]: {$exception->getMessage()}", $exception);
         }
 
         return [$health, $seconds];

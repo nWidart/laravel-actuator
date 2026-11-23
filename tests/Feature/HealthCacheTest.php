@@ -17,7 +17,6 @@ use OpenTelemetry\SDK\Metrics\Data\Histogram;
 use OpenTelemetry\SDK\Metrics\Data\HistogramDataPoint;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
 use PHPUnit\Framework\Attributes\Test;
-use ReflectionProperty;
 
 final class HealthCacheTest extends TestCase
 {
@@ -29,7 +28,6 @@ final class HealthCacheTest extends TestCase
 
         CountingHealthIndicator::$runs = 0;
         $this->metrics = Metrics::fake();
-        (new ReflectionProperty(HealthEndpoint::class, 'logged'))->setValue(null, []);
         Cache::store('file')->flush();
     }
 
@@ -124,6 +122,35 @@ final class HealthCacheTest extends TestCase
             ->assertJsonPath('components.unserializable.details.key', 'value');
 
         Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache could not be written for indicator [unserializable]'))->once();
+    }
+
+    #[Test]
+    public function a_write_failure_does_not_silence_a_read_failure(): void
+    {
+        config()->set('actuator.health.cache.store', 'file');
+        config()->set('actuator.health.indicators.unserializable', UnserializableHealthIndicator::class);
+        Log::spy();
+
+        $this->getJson('/actuator/health')->assertOk();
+        config()->set('actuator.health.cache.store', 'missing');
+        $this->getJson('/actuator/health')->assertOk();
+
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache could not be written'))->once();
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache could not be read'))->once();
+    }
+
+    #[Test]
+    public function a_store_name_that_is_not_a_string_turns_the_cache_off_with_a_warning(): void
+    {
+        config()->set('actuator.health.cache.store', ['file']);
+        Log::spy();
+
+        $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 1);
+        $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 2);
+
+        Log::shouldHaveReceived('warning')
+            ->with('Health setting [actuator.health.cache.store] must be a cache store name. The health cache is off.', [])
+            ->once();
     }
 
     #[Test]

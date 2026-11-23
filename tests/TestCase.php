@@ -5,10 +5,20 @@ declare(strict_types=1);
 namespace Nwidart\Actuator\Tests;
 
 use Nwidart\Actuator\ActuatorServiceProvider;
+use Nwidart\Actuator\Health\HealthEndpoint;
 use Orchestra\Testbench\TestCase as Orchestra;
+use ReflectionProperty;
 
 abstract class TestCase extends Orchestra
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // HealthEndpoint keeps the health cache warnings it logged in a static: start each test with none.
+        (new ReflectionProperty(HealthEndpoint::class, 'logged'))->setValue(null, []);
+    }
+
     protected function getPackageProviders($app): array
     {
         return [ActuatorServiceProvider::class];

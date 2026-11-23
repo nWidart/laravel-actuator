@@ -224,8 +224,7 @@ Do not use `array` under PHP-FPM: it lives for one request, so nothing is reused
 when several servers share the `storage` directory.
 
 A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
-and a warning is logged, once per process (once per request under PHP-FPM, once per worker under
-Octane). A result the store cannot serialize is answered without being cached. A published file
+and a warning is logged, once per request under PHP-FPM, once per worker under Octane. A result the store cannot serialize is answered without being cached. A published file
 without a `cache` key keeps the cache off.
 
 The cache cuts repeated runs while the checks are fast. Probes that arrive while a slow check runs
