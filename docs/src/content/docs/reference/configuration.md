@@ -262,7 +262,7 @@ database, cache and Redis connections short.
 
 | Key      | Description                                                                          |
 | -------- | ------------------------------------------------------------------------------------ |
-| `queues` | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set. Empty, the default, watches the default queue of the default connection. |
+| `queues` | Map of queue connection name to list of queue names, for example `['redis' => ['default', 'emails']]`. The [`queue` indicator](/laravel-actuator/reference/health-indicators/#queuehealthindicator) watches these queues unless its `queues` argument is set. Empty, the default, watches the default queue of the default connection. Each connection needs at least one queue name. Any other shape makes the indicator `DOWN` with an `InvalidArgumentException`. |
 
 See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
 

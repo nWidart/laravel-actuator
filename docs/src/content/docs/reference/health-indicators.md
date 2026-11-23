@@ -176,11 +176,19 @@ jobs table. See [Monitor queues](/laravel-actuator/guides/monitor-queues/).
 
 The default queue of a connection is its `queue` key in `config/queue.php`, or `default`.
 
+Each connection needs at least one queue name. A single name in place of the list also works:
+`['redis' => 'default']`. Any other shape, such as a list without connection names, makes the
+indicator `DOWN` with this `error`:
+
+```text
+InvalidArgumentException: Watched queues must map a connection name to queue names: ['connection' => ['queue', ...]].
+```
+
 | Status    | When                                                                     |
 | --------- | ------------------------------------------------------------------------ |
 | `UP`      | Every queue is below the thresholds.                                     |
 | `WARNING` | A queue reaches `warningThreshold`, and none reaches `downThreshold`.    |
-| `DOWN`    | A queue reaches `downThreshold`, or a queue cannot be read.              |
+| `DOWN`    | A queue reaches `downThreshold`, a queue cannot be read, or `queues` has the wrong shape. |
 
 | Detail             | Type    | Description                                                       |
 | ------------------ | ------- | ----------------------------------------------------------------- |
