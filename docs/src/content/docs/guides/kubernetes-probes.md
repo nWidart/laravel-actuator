@@ -77,7 +77,8 @@ spec:
 
 Each probe boots the application in a new PHP process, which costs more than an HTTP request. Keep
 `periodSeconds` at 30 or more, and `timeoutSeconds` above the boot time plus the slowest
-indicator. Use the same probes for a scheduler pod.
+indicator. Use the same probes for a scheduler pod, or check that it ticks with the `scheduler`
+indicator, as [Monitor the scheduler](/laravel-actuator/guides/monitor-the-scheduler/#probe-the-scheduler-pod) shows.
 
 The command ignores `show_details` and `show_components`, and never uses the health cache. An
 unknown group or component exits `2`. Run it by hand to see why a pod fails:

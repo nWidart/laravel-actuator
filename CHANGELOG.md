@@ -2,6 +2,29 @@
 
 All notable changes to `laravel-actuator` will be documented in this file.
 
+## Unreleased
+
+### Added
+
+- `QueueHealthIndicator`, named `queue`: the size of each watched queue, with its `pending`, `delayed` and `reserved` jobs where the driver counts them. It is `WARNING` from `warningThreshold` jobs and `DOWN` from `downThreshold` jobs in any queue, or when a queue cannot be read. See the [reference](https://nwidart.github.io/laravel-actuator/reference/health-indicators/#queuehealthindicator).
+- `queue.queues` lists the queues the `queue` indicator watches, by connection: `['redis' => ['default', 'emails']]`. Empty watches the default queue of the default connection. See the [configuration reference](https://nwidart.github.io/laravel-actuator/reference/configuration/#queue).
+- `FailedJobsHealthIndicator`, named `failedJobs`: the number of failed jobs, `WARNING` from 1 by default and `DOWN` from `downThreshold`. `minutes` counts only the jobs that failed within that many minutes, on the database failers. It is `UNKNOWN` when the failer cannot count. See the [reference](https://nwidart.github.io/laravel-actuator/reference/health-indicators/#failedjobshealthindicator).
+- `HorizonHealthIndicator`, named `horizon`: `UP` while Horizon runs, `WARNING` when it is paused, `DOWN` when no master supervisor runs, and `UNKNOWN` without laravel/horizon, which is in `suggest`. See the [reference](https://nwidart.github.io/laravel-actuator/reference/health-indicators/#horizonhealthindicator).
+- The `queue`, `failedJobs` and `horizon` indicators are off by default: uncomment them in `health.indicators`. Keep them out of `liveness`, and out of `readiness`: restarting web pods does not drain a queue. Put them in a group of their own.
+- The gauges `laravel.queue.size` (`laravel_queue_size`), with a series per connection and queue of `queue.queues`, `laravel.queue.jobs` (`laravel_queue_jobs`), with a series per queue and `state`, and `laravel.queue.failed.jobs` (`laravel_queue_failed_jobs`). They are off by default: turn them on with `queue.metrics` (`ACTUATOR_QUEUE_METRICS=true`). Each scrape then counts the jobs of every watched queue, a query per queue and state on the `database` driver, and the health cache does not apply: keep connect timeouts short. See the [metrics reference](https://nwidart.github.io/laravel-actuator/reference/metrics/#queues).
+- The panels Queue size, by queue, Queued jobs, by state and Failed jobs in the Queues row of the sample Grafana dashboard. They stay empty until `queue.metrics` is on.
+- Each task of the `scheduledtasks` endpoint has a `lastExecution`, in the shape of Spring Boot 3.4: its `time`, its `status` (`STARTED`, `SUCCESS` or `ERROR`) and, on `ERROR`, the `exception`. It is left out when no run is recorded. See [Last execution](https://nwidart.github.io/laravel-actuator/reference/endpoints/scheduledtasks/#last-execution).
+- `scheduledtasks.show_exceptions` shows the message of a task's last exception: `never` (the default), `always` or `when_authorized`. The exception type is always shown. The message can hold a command's arguments.
+- The scheduler records the last execution of each task and the time of each `schedule:run` in the cache store `scheduler.store` (`ACTUATOR_SCHEDULER_STORE`), the application's default store when empty. `scheduler.record` (`ACTUATOR_SCHEDULER_RECORD`) turns the recording off. The scheduler and the web instances must share the store: the `file` and `array` stores do not work when the scheduler runs on another host. See the [configuration reference](https://nwidart.github.io/laravel-actuator/reference/configuration/#scheduler).
+- `SchedulerHealthIndicator`, named `scheduler`: `DOWN` when `schedule:run` has not started for `downAfter` minutes (5) or never did, `WARNING` after `warningAfter` minutes (2), and `UNKNOWN` when the recording is off. It is off by default. See the [reference](https://nwidart.github.io/laravel-actuator/reference/health-indicators/#schedulerhealthindicator).
+- Two guides: [Monitor queues](https://nwidart.github.io/laravel-actuator/guides/monitor-queues/) and [Monitor the scheduler](https://nwidart.github.io/laravel-actuator/guides/monitor-the-scheduler/).
+
+### Changed
+
+- The scheduler now writes to a cache store, without any setting: the time of each `schedule:run`, and each task's last execution when it starts and when it ends. The store is the application's default cache store unless `scheduler.store` is set. The keys start with `actuator:scheduler:`. A task's record expires after 7 days without a run, the `schedule:run` time never does. A store that fails logs a warning once per process and never fails a task. Set `ACTUATOR_SCHEDULER_RECORD=false` to turn it off.
+- The `scheduledtasks` endpoint reads that store on each request, and its tasks gain a `lastExecution` key once they have run. Code or tests that compare the exact JSON of the endpoint see the new key.
+- A published configuration needs no change. It gets the new `queue` and `scheduler` keys from the package's defaults: the queue gauges stay off and the scheduler records to the default cache store. A published `scheduledtasks` without `show_exceptions` hides the exception messages, as `never` does. Add the keys to your `config/actuator.php` to change them.
+
 ## 1.4.0 - 2026-11-23
 
 ### Added
