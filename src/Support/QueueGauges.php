@@ -42,8 +42,9 @@ final class QueueGauges
 
     /**
      * @param  array<string, list<string>>  $queues  connection => queue names
+     * @param  bool  $states  whether to count the jobs by state, for "laravel.queue.jobs"
      */
-    private function __construct(private readonly array $queues) {}
+    private function __construct(private readonly array $queues, private readonly bool $states) {}
 
     /**
      * Registers the gauges when "queue.metrics" is on. Nothing runs until the metrics are exported.
@@ -87,7 +88,7 @@ final class QueueGauges
             return;
         }
 
-        $gauges = new self($queues);
+        $gauges = new self($queues, $registry->enabled(self::JOBS_METER));
 
         // Each export reads the queues again. Export callbacks all run before any gauge is read.
         $metrics->onExport(static function () use ($gauges): void {
@@ -140,6 +141,7 @@ final class QueueGauges
                 $this->counts[$connection] = WatchedQueues::read(
                     static fn () => CurrentContainer::getInstance()->make(QueueFactory::class)->connection($connection),
                     $names,
+                    $this->states,
                 );
             }
         }

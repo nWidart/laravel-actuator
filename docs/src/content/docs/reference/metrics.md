@@ -189,7 +189,8 @@ to the exception handler.
 
 [`metrics.enable`](/laravel-actuator/reference/configuration/#metricsenable) still applies: it
 turns off the series by state with `'laravel.queue.jobs' => false`, or every queue gauge with
-`'laravel.queue' => false`.
+`'laravel.queue' => false`. With the series by state off, the scrape reads only the size of each
+queue: on the `database` driver, that saves three queries per queue.
 
 ## Metrics read on export
 

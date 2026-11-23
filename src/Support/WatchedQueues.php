@@ -63,13 +63,14 @@ final class WatchedQueues
      * not be read. Until one queue answers, a failure is taken as the connection's: its other
      * queues are skipped, with the same exception, rather than each waiting for the connect
      * timeout. So the other queues are skipped exactly when the first queue failed. A count by
-     * state that fails keeps the size: each state holds the exception.
+     * state that fails keeps the size: each state holds the exception. With $states false, only
+     * the size is read: each count by state is a query on the database driver.
      *
      * @param  Closure(): Queue  $connect  makes the connection
      * @param  list<string>  $names
      * @return array<string, array<string, int|Throwable>|Throwable> queue name => size and states, or why it could not be read
      */
-    public static function read(Closure $connect, array $names): array
+    public static function read(Closure $connect, array $names, bool $states = true): array
     {
         try {
             $queue = $connect();
@@ -94,13 +95,19 @@ final class WatchedQueues
                 continue;
             }
 
-            try {
-                $states = self::counts($queue, $name);
-            } catch (Throwable $exception) {
-                $states = array_fill_keys(array_keys(self::COUNTS), $exception);
+            if (! $states) {
+                $counts[$name] = ['size' => $size];
+
+                continue;
             }
 
-            $counts[$name] = ['size' => $size, ...$states];
+            try {
+                $byState = self::counts($queue, $name);
+            } catch (Throwable $exception) {
+                $byState = array_fill_keys(array_keys(self::COUNTS), $exception);
+            }
+
+            $counts[$name] = ['size' => $size, ...$byState];
         }
 
         return $counts;

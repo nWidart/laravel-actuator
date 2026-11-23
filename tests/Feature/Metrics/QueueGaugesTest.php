@@ -25,6 +25,9 @@ final class QueueGaugesTest extends TestCase
     /** Calls to size() on the fake queues. */
     private int $reads = 0;
 
+    /** Calls to pendingSize(), delayedSize() and reservedSize() on the fake queues. */
+    private int $stateReads = 0;
+
     protected function defineEnvironment($app): void
     {
         parent::defineEnvironment($app);
@@ -339,6 +342,8 @@ final class QueueGaugesTest extends TestCase
         $this->assertStringNotContainsString('laravel_queue_jobs', $metrics);
         $this->assertStringContainsString(self::sizeSeries('redis', 'default')." 12\n", $metrics);
         $this->assertStringContainsString(self::FAILED." 4\n", $metrics);
+        // Each count by state is a query on the database driver: none is made for nothing.
+        $this->assertSame(0, $this->stateReads);
     }
 
     #[Test]
@@ -433,11 +438,12 @@ final class QueueGaugesTest extends TestCase
     private function counted(array $counts): object
     {
         $reads = &$this->reads;
+        $stateReads = &$this->stateReads;
 
-        return new class($counts, $reads)
+        return new class($counts, $reads, $stateReads)
         {
             /** @param  array<string, array{int, int, int, int}>  $counts */
-            public function __construct(private array $counts, private int &$reads) {}
+            public function __construct(private array $counts, private int &$reads, private int &$stateReads) {}
 
             public function size(?string $queue = null): int
             {
@@ -448,16 +454,22 @@ final class QueueGaugesTest extends TestCase
 
             public function pendingSize(?string $queue = null): int
             {
+                $this->stateReads++;
+
                 return $this->counts[$queue][1];
             }
 
             public function delayedSize(?string $queue = null): int
             {
+                $this->stateReads++;
+
                 return $this->counts[$queue][2];
             }
 
             public function reservedSize(?string $queue = null): int
             {
+                $this->stateReads++;
+
                 return $this->counts[$queue][3];
             }
         };
