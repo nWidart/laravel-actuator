@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace Nwidart\Actuator\Tests\Feature;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
-use InvalidArgumentException;
 use Nwidart\Actuator\Health\HealthEndpoint;
 use Nwidart\Actuator\Tests\Fixtures\CountingHealthIndicator;
+use Nwidart\Actuator\Tests\Fixtures\FixedHealthIndicator;
+use Nwidart\Actuator\Tests\Fixtures\UnserializableHealthIndicator;
 use Nwidart\Actuator\Tests\TestCase;
 use Nwidart\Metrics\Facades\Metrics;
 use Nwidart\Metrics\Testing\MetricsFake;
@@ -15,6 +17,7 @@ use OpenTelemetry\SDK\Metrics\Data\Histogram;
 use OpenTelemetry\SDK\Metrics\Data\HistogramDataPoint;
 use Orchestra\Testbench\Attributes\DefineEnvironment;
 use PHPUnit\Framework\Attributes\Test;
+use ReflectionProperty;
 
 final class HealthCacheTest extends TestCase
 {
@@ -26,6 +29,15 @@ final class HealthCacheTest extends TestCase
 
         CountingHealthIndicator::$runs = 0;
         $this->metrics = Metrics::fake();
+        (new ReflectionProperty(HealthEndpoint::class, 'logged'))->setValue(null, []);
+        Cache::store('file')->flush();
+    }
+
+    protected function tearDown(): void
+    {
+        Cache::store('file')->flush();
+
+        parent::tearDown();
     }
 
     protected function defineEnvironment($app): void
@@ -62,15 +74,69 @@ final class HealthCacheTest extends TestCase
     }
 
     #[Test]
-    public function it_rejects_a_ttl_that_is_not_a_whole_number_of_seconds(): void
+    public function a_ttl_that_is_not_a_whole_number_of_seconds_turns_the_cache_off_with_a_warning(): void
     {
-        config()->set('actuator.health.cache.ttl', 'soon');
+        config()->set('actuator.health.cache.ttl', '3s');
+        Log::spy();
 
-        $this->withoutExceptionHandling();
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Health setting [actuator.health.cache.ttl] must be a whole number of seconds, 0 or more.');
+        $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 1);
+        $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 2);
+        $this->getJson('/actuator/health/missing')->assertNotFound();
 
-        $this->getJson('/actuator/health');
+        Log::shouldHaveReceived('warning')
+            ->with('Health setting [actuator.health.cache.ttl] must be a whole number of seconds, 0 or more. The health cache is off.', [])
+            ->once();
+    }
+
+    #[Test]
+    public function an_empty_store_name_is_the_file_store_not_the_default_store(): void
+    {
+        config()->set('cache.default', 'missing');
+
+        foreach ([null, ''] as $store) {
+            config()->set('actuator.health.cache.store', $store);
+            Cache::store('file')->flush();
+            CountingHealthIndicator::$runs = 0;
+
+            $this->getJson('/actuator/health')->assertJsonPath('components.counting.details.run', 1);
+            $this->getJson('/actuator/health')->assertJsonPath('components.counting.details.run', 1);
+        }
+    }
+
+    #[Test]
+    public function an_indicator_duration_detail_wins(): void
+    {
+        config()->set('actuator.health.indicators.fixed', [FixedHealthIndicator::class, ['details' => ['duration' => 'mine']]]);
+
+        $this->getJson('/actuator/health')->assertJsonPath('components.fixed.details', ['duration' => 'mine']);
+    }
+
+    #[Test]
+    public function a_result_the_store_cannot_serialize_is_still_answered(): void
+    {
+        config()->set('actuator.health.cache.store', 'file');
+        config()->set('actuator.health.indicators.unserializable', UnserializableHealthIndicator::class);
+        Log::spy();
+
+        $this->getJson('/actuator/health')
+            ->assertOk()
+            ->assertJsonPath('components.unserializable.status', 'UP')
+            ->assertJsonPath('components.unserializable.details.key', 'value');
+
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache could not be written for indicator [unserializable]'))->once();
+    }
+
+    #[Test]
+    public function a_result_cached_with_details_hidden_shows_them_later(): void
+    {
+        config()->set('actuator.health.show_details', 'never');
+        config()->set('actuator.health.show_components', 'always');
+        $this->getJson('/actuator/health')->assertJsonPath('components.counting', ['status' => 'UP']);
+
+        config()->set('actuator.health.show_details', 'always');
+        $this->getJson('/actuator/health')
+            ->assertJsonPath('components.counting.details.run', 1)
+            ->assertJsonPath('components.counting.details.duration', fn (string $duration): bool => str_starts_with($duration, 'PT'));
     }
 
     #[Test]
@@ -120,15 +186,16 @@ final class HealthCacheTest extends TestCase
     }
 
     #[Test]
-    public function a_cache_that_fails_falls_back_to_running_the_indicator(): void
+    public function a_cache_that_fails_falls_back_to_running_the_indicator_and_logs_once(): void
     {
         config()->set('actuator.health.cache.store', 'missing');
+        config()->set('actuator.health.indicators.other', [CountingHealthIndicator::class, ['status' => 'UP']]);
         Log::spy();
 
         $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 1);
-        $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 2);
+        $this->getJson('/actuator/health')->assertOk()->assertJsonPath('components.counting.details.run', 3);
 
-        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache'))->twice();
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message): bool => str_contains($message, 'Health cache'))->once();
     }
 
     #[Test]

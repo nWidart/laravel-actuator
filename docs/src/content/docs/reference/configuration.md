@@ -203,8 +203,8 @@ This is Spring Boot's `management.endpoint.health.cache.time-to-live`.
 
 | Key     | Type          | Description                                                                         |
 | ------- | ------------- | ----------------------------------------------------------------------------------- |
-| `ttl`   | int (seconds) | How long a result is reused. `0`, the default, turns the cache off. A value that is not a whole number of seconds, 0 or more, throws `InvalidArgumentException`. |
-| `store` | string        | The Laravel cache store that keeps the results. It must be local to the instance.   |
+| `ttl`   | int (seconds) | How long a result is reused. `0`, the default, turns the cache off. A value that is not a whole number of seconds, 0 or more, logs a warning and turns the cache off. |
+| `store` | string        | The Laravel cache store that keeps the results. It must be local to the instance. `null` or an empty string is `file`, never the default store. |
 
 Results are kept per indicator name and definition: the whole endpoint, its groups and its
 components share one entry, and a changed class or constructor argument is a new entry. The
@@ -224,7 +224,13 @@ Do not use `array` under PHP-FPM: it lives for one request, so nothing is reused
 when several servers share the `storage` directory.
 
 A store that is missing or cannot be reached never breaks the health endpoint: the indicator runs,
-and a warning is logged. A published file without a `cache` key keeps the cache off.
+and a warning is logged, once per process (once per request under PHP-FPM, once per worker under
+Octane). A result the store cannot serialize is answered without being cached. A published file
+without a `cache` key keeps the cache off.
+
+The cache cuts repeated runs while the checks are fast. Probes that arrive while a slow check runs
+all miss the cache and run the check too. Keep the connection and read timeouts of the checked
+services short.
 
 Keep the TTL short, 2 to 5 seconds. A longer one keeps a stale `DOWN` and holds the instance out
 of traffic after it recovered. See [Kubernetes probes](/laravel-actuator/guides/kubernetes-probes/#cache-the-results).

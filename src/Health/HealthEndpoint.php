@@ -22,16 +22,25 @@ use Throwable;
  *
  * @phpstan-type GroupConfig array{include?: list<string>, show_details?: string|null, show_components?: string|null, status?: array<string, mixed>}
  */
-final readonly class HealthEndpoint
+final class HealthEndpoint
 {
     /** The histogram of how long each indicator takes to run, in seconds. */
     public const DURATION_METER = 'laravel.health.indicator.duration';
 
+    /**
+     * The cache problems already logged, so that a failing store does not log a warning for each
+     * indicator of each probe. Static, so once per process: per request under PHP-FPM, per worker
+     * under Octane. A store that fails again after it recovered is not logged again.
+     *
+     * @var array<string, true>
+     */
+    private static array $logged = [];
+
     public function __construct(
-        private Container $container,
-        private Repository $config,
-        private CacheFactory $cache,
-        private MeterRegistry $registry,
+        private readonly Container $container,
+        private readonly Repository $config,
+        private readonly CacheFactory $cache,
+        private readonly MeterRegistry $registry,
     ) {}
 
     /**
@@ -240,7 +249,8 @@ final readonly class HealthEndpoint
         $result = ['status' => $health->status];
 
         if ($showDetails) {
-            $result['details'] = [...$health->details, 'duration' => self::duration($seconds)];
+            // A "duration" detail of the indicator wins.
+            $result['details'] = $health->details + ['duration' => self::duration($seconds)];
         }
 
         return $result;
@@ -255,13 +265,17 @@ final readonly class HealthEndpoint
      */
     private function cached(string $name, string|array $definition, int $ttl): array
     {
+        // An empty name would select the default store, often shared between instances.
+        $storeName = $this->config->get('actuator.health.cache.store');
+        $storeName = $storeName === null || $storeName === '' ? 'file' : $storeName;
+
         try {
-            $store = $this->cache->store($this->config->string('actuator.health.cache.store', 'file'));
+            $store = $this->cache->store(is_string($storeName) ? $storeName : throw new InvalidArgumentException('Health setting [actuator.health.cache.store] must be a cache store name.'));
             // The definition is part of the key, so a changed class or argument is a new entry.
             $key = "actuator:health:{$name}:".hash('xxh128', serialize($definition));
             $entry = $store->get($key);
         } catch (Throwable $exception) {
-            Log::warning("Health cache could not be read for indicator [{$name}]: {$exception->getMessage()}", ['exception' => $exception]);
+            $this->warnOnce('store', "Health cache could not be read for indicator [{$name}]: {$exception->getMessage()}", $exception);
 
             return $this->run($name, $definition);
         }
@@ -277,7 +291,7 @@ final readonly class HealthEndpoint
             // Only plain values, never the indicator or the exception it threw.
             $store->put($key, ['status' => $health->status->value, 'details' => $health->details, 'duration' => $seconds], $ttl);
         } catch (Throwable $exception) {
-            Log::warning("Health cache could not be written for indicator [{$name}]: {$exception->getMessage()}", ['exception' => $exception]);
+            $this->warnOnce('store', "Health cache could not be written for indicator [{$name}]: {$exception->getMessage()}", $exception);
         }
 
         return [$health, $seconds];
@@ -321,17 +335,34 @@ final readonly class HealthEndpoint
     }
 
     /**
-     * Seconds the results stay cached. 0, the default, turns the cache off.
+     * Seconds the results stay cached. 0, the default, turns the cache off. An invalid value logs a
+     * warning and turns the cache off too: a performance setting must never fail the probes.
      */
     private function ttl(): int
     {
         $ttl = $this->config->get('actuator.health.cache.ttl', 0);
 
+        if ($ttl === null || $ttl === '') {
+            return 0;
+        }
+
         if (! is_numeric($ttl) || (int) $ttl != $ttl || $ttl < 0) {
-            throw new InvalidArgumentException('Health setting [actuator.health.cache.ttl] must be a whole number of seconds, 0 or more.');
+            $this->warnOnce('ttl', 'Health setting [actuator.health.cache.ttl] must be a whole number of seconds, 0 or more. The health cache is off.');
+
+            return 0;
         }
 
         return (int) $ttl;
+    }
+
+    private function warnOnce(string $key, string $message, ?Throwable $exception = null): void
+    {
+        if (isset(self::$logged[$key])) {
+            return;
+        }
+
+        self::$logged[$key] = true;
+        Log::warning($message, $exception === null ? [] : ['exception' => $exception]);
     }
 
     /**

@@ -49,7 +49,7 @@ Same as the root, without `groups`.
 | `details` | object | Details are visible. Holds the indicator's details and `duration`. |
 
 `duration` is how long the indicator took to run, as an ISO-8601 duration with millisecond
-precision, such as `"PT0.012S"`. It replaces a `duration` detail of the indicator.
+precision, such as `"PT0.012S"`. A `duration` detail of the indicator wins.
 
 Each entry of `components` has the component format.
 

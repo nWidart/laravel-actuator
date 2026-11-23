@@ -116,7 +116,8 @@ Every health request runs every indicator, and probes call the endpoint every fe
 - If a check is expensive, compute it in a scheduled job, store the result in the cache, and let the
   indicator read the cache.
 - Set a short [health cache](/laravel-actuator/reference/configuration/#healthcache), 2 to 5
-  seconds, so frequent probes share one run.
+  seconds, so frequent probes reuse a recent result. It does not help while a check hangs, so the
+  timeouts still matter.
 
 ## See also
 

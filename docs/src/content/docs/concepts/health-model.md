@@ -128,12 +128,16 @@ makes every probe slow, and the probes pile up on the PHP-FPM workers.
 
 [`health.cache.ttl`](/laravel-actuator/reference/configuration/#healthcache) reuses each indicator's
 result for a few seconds. The cache is per indicator, so the endpoint, its groups and its components
-share one run. A cached result keeps the `duration` of the run that produced it, and is not recorded
+reuse the same results. A cached result keeps the `duration` of the run that produced it, and is not recorded
 in the histogram again.
 
 The cache must be local to each instance. A health check asks "does this instance work?". A result
 shared between instances answers for whichever instance ran the check last, and hides one
 instance's failure behind another's success.
+
+The cache cuts repeated runs while the checks are fast. It does not stop probes that arrive while
+a slow check runs: each one misses the cache and runs the check too. Keep the connection and read
+timeouts of the checked services short.
 
 Keep the TTL short, 2 to 5 seconds: it bounds how long a recovered instance still reports `DOWN`.
 For a check that is slow or expensive, compute the result in a scheduled job and let the indicator
