@@ -138,7 +138,18 @@ final readonly class HealthEndpoint
             throw new InvalidArgumentException("Health status setting [{$key}] must be a list of status codes.");
         }
 
-        return array_map(fn (mixed $code): Status => $this->status($code, $key), $order);
+        $statuses = [];
+        foreach ($order as $code) {
+            $status = $this->status($code, $key);
+
+            if (in_array($status, $statuses, true)) {
+                throw new InvalidArgumentException("Health status setting [{$key}] lists [{$status->value}] more than once.");
+            }
+
+            $statuses[] = $status;
+        }
+
+        return $statuses;
     }
 
     /**
@@ -158,6 +169,10 @@ final readonly class HealthEndpoint
         $codes = [];
         foreach ($mapping as $code => $httpStatus) {
             $status = $this->status($code, $key);
+
+            if (isset($codes[$status->value])) {
+                throw new InvalidArgumentException("Health status setting [{$key}] maps [{$status->value}] more than once.");
+            }
 
             if (! is_int($httpStatus) || $httpStatus < 100 || $httpStatus > 599) {
                 throw new InvalidArgumentException("Health status setting [{$key}] must map [{$status->value}] to an integer HTTP status code from 100 to 599.");
