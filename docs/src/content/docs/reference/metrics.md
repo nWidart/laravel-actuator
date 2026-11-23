@@ -161,7 +161,8 @@ laravel_queue_failed_jobs{otel_scope_name="nwidart/laravel-actuator"} 4
 ```
 
 The gauges are read during the scrape and are never stored. Each scrape reads each queue once. A
-queue that cannot be read loses its own series, and the scrape still succeeds. A count by state that
+queue that cannot be read loses its own series, and the scrape still succeeds (but see below for the
+first queue of a connection). A count by state that
 fails loses only the series by state of its queue. Every instance reads the same queues: aggregate
 with `max`, not `sum`.
 
@@ -175,6 +176,9 @@ ACTUATOR_QUEUE_METRICS=true
 Each scrape then counts the jobs of every watched queue. On the `database` driver, that is a
 `COUNT(*)` on the jobs table for each queue and state. A connection that fails on its first queue
 is not tried again for its other queues in that scrape, so it costs one connect timeout per scrape.
+The gauges cannot tell a connection error from an error of that queue alone, such as a deleted SQS
+queue: the other queues of the connection lose their series too. Watch a queue that may be missing
+after the others, or on a connection of its own.
 A connection that answers slowly still holds the whole scrape: past Prometheus' `scrape_timeout`,
 the scrape fails and every metric of the instance is missing. Keep the connect timeouts of your
 queue connections short.

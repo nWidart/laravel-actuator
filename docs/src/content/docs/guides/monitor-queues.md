@@ -121,8 +121,9 @@ pending, delayed and reserved jobs. `laravel_queue_failed_jobs` counts the faile
 
 Each scrape counts every queue again: the health cache does not apply. On the `database` driver,
 that is a `COUNT(*)` on the jobs table for each queue and state. A queue that cannot be read loses
-only its own series. A connection that fails on its first queue is skipped for its other queues, so
-it costs one connect timeout per scrape. A slow connection still holds the whole scrape, and past
+its own series. A connection that fails on its first queue is skipped for its other queues, so
+it costs one connect timeout per scrape. Any error on the first queue counts as a connection error,
+even one of that queue alone, such as a deleted SQS queue. A slow connection still holds the whole scrape, and past
 `scrape_timeout` every metric of the instance is missing. Keep the connect timeouts of your queue
 connections short.
 
