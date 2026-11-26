@@ -16,6 +16,7 @@ use Nwidart\Actuator\Health\HealthGauges;
 use Nwidart\Actuator\Metrics\MeterRegistry;
 use Nwidart\Actuator\Support\QueueGauges;
 use Nwidart\Actuator\Support\ScheduledTaskRecorder;
+use Nwidart\Actuator\Support\ScheduledTaskTags;
 use Nwidart\Metrics\AttributeContributors;
 use Nwidart\Metrics\Metrics;
 use Nwidart\Metrics\MetricsServiceProvider;
@@ -28,6 +29,7 @@ final class ActuatorServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/../config/actuator.php', 'actuator');
 
         $this->app->singletonIf(EndpointRegistry::class);
+        $this->app->singletonIf(ScheduledTaskTags::class);
 
         // Metrics are recorded, stored and served by nwidart/laravel-metrics. It is registered here
         // too, for applications that turn package discovery off.
