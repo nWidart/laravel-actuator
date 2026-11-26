@@ -139,6 +139,9 @@ final class Actuator
 {
     /** @param class-string $class */
     public static function endpoint(string $id, string $class): void;
+
+    /** @param Closure(Event): array<mixed> $callback */
+    public static function tagScheduledTasksUsing(Closure $callback): void;
 }
 ```
 
@@ -146,6 +149,10 @@ Registers a custom endpoint class under an ID. Call it in `register()` or `boot(
 provider. An invalid, reserved or duplicate ID throws `InvalidArgumentException`. A call after the
 application has booted throws `LogicException`. See
 [custom endpoints](/laravel-actuator/reference/custom-endpoints/).
+
+`tagScheduledTasksUsing()` adds tags to the entries of the `scheduledtasks` endpoint. The callback
+receives each `Illuminate\Console\Scheduling\Event` and returns an array of tags. See
+[tags](/laravel-actuator/reference/endpoints/scheduledtasks/#tags).
 
 `Actuator` is also the class to test for when Laravel Actuator is an optional dependency:
 `class_exists(\Nwidart\Actuator\Actuator::class)`.

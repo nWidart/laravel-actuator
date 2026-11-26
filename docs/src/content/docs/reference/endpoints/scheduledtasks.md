@@ -38,6 +38,7 @@ HTTP 200 with a JSON object holding four lists:
 | `timezone`           | string | Task timezone, or `app.timezone` when the task sets none.           |
 | `nextExecution.time` | string | Next run, ISO 8601, in the task timezone.                           |
 | `lastExecution`      | object | The last run. Left out when none is recorded. See [last execution](#last-execution). |
+| `tags`               | object | Tags added by a package or the application. Left out when there are none. See [tags](#tags). |
 
 ### `fixedRate` entries
 
@@ -47,6 +48,7 @@ HTTP 200 with a JSON object holding four lists:
 | `initialDelay`    | integer | Always `0`.                              |
 | `interval`        | integer | Interval in milliseconds.                |
 | `lastExecution`   | object  | The last run. Left out when none is recorded. |
+| `tags`            | object  | Tags added by a package or the application. Left out when there are none. |
 
 ### Last execution
 
@@ -81,6 +83,37 @@ endpoint answers without `lastExecution`.
 
 A task is recorded under its [target](#targets). Two tasks with the same target share one record:
 give them different descriptions to keep them apart.
+
+### Tags
+
+A package or the application can add tags to each task with `Actuator::tagScheduledTasksUsing()`.
+Spring Boot has no such key. The callback receives the scheduled event and returns an array of tags.
+Call it in `register()` or `boot()` of a service provider.
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Console\Scheduling\Event;
+use Nwidart\Actuator\Actuator;
+
+Actuator::tagScheduledTasksUsing(fn (Event $event): array => [
+    'team' => str_contains((string) $event->command, 'billing:') ? 'billing' : 'platform',
+]);
+```
+
+```json
+{
+  "runnable": { "target": "php artisan billing:send" },
+  "expression": "0 6 * * *",
+  "timezone": "UTC",
+  "nextExecution": { "time": "2026-01-02T06:00:00+00:00" },
+  "tags": { "team": "billing" }
+}
+```
+
+A tag value is a string, a number or a boolean. A tag with an empty name or another value is
+dropped, and so is a tag whose value is `null`. With several callbacks, a later callback replaces a
+tag of an earlier one. A callback that throws is reported and skipped, and the endpoint still
+answers. [nwidart/laravel-modules](https://github.com/nWidart/laravel-modules) uses this to add the
+`module` tag to the tasks a module schedules.
 
 ### Exception messages
 

@@ -12,6 +12,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Date;
 use Nwidart\Actuator\Endpoints\Attributes\ReadOperation;
+use Nwidart\Actuator\Support\ScheduledTaskTags;
 use Nwidart\Actuator\Support\ScheduledTaskTarget;
 use Nwidart\Actuator\Support\SchedulerStore;
 use Nwidart\Actuator\Visibility;
@@ -20,6 +21,8 @@ use Nwidart\Actuator\Visibility;
  * Scheduled tasks, in the Spring Boot "scheduledtasks" format.
  * Sub-minute tasks are listed as "fixedRate" with an interval in milliseconds.
  * A task's "lastExecution" comes from the SchedulerStore, and is left out when it has none.
+ * A task's "tags" come from the callbacks of Actuator::tagScheduledTasksUsing(), and are left out when
+ * they give none.
  *
  * @phpstan-import-type LastExecution from SchedulerStore
  */
@@ -43,6 +46,15 @@ final class ScheduledTasksController
         $withLastExecution = static fn (array $task, string $target): array => isset($executions[$target])
             ? [...$task, 'lastExecution' => self::lastExecution($executions[$target], $showMessage)]
             : $task;
+        $tags = $app->make(ScheduledTaskTags::class);
+
+        /**
+         * @param  array<string, mixed>  $task
+         * @return array<string, mixed>
+         */
+        $withTags = static fn (array $task, Event $event): array => ($found = $tags->for($event)) !== []
+            ? [...$task, 'tags' => $found]
+            : $task;
 
         $cron = [];
         $fixedRate = [];
@@ -51,17 +63,17 @@ final class ScheduledTasksController
             $runnable = ['target' => $targets[$index]];
 
             if ($event->isRepeatable()) {
-                $fixedRate[] = $withLastExecution(['runnable' => $runnable, 'initialDelay' => 0, 'interval' => $event->repeatSeconds * 1000], $targets[$index]);
+                $fixedRate[] = $withTags($withLastExecution(['runnable' => $runnable, 'initialDelay' => 0, 'interval' => $event->repeatSeconds * 1000], $targets[$index]), $event);
 
                 continue;
             }
 
-            $cron[] = $withLastExecution([
+            $cron[] = $withTags($withLastExecution([
                 'runnable' => $runnable,
                 'expression' => $event->getExpression(),
                 'timezone' => $this->timezone($event),
                 'nextExecution' => ['time' => $event->nextRunDate(Date::now())->toIso8601String()],
-            ], $targets[$index]);
+            ], $targets[$index]), $event);
         }
 
         // A stored exception message, or a target, can hold bytes that are not UTF-8: they are

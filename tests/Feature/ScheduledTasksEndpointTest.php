@@ -6,13 +6,17 @@ namespace Nwidart\Actuator\Tests\Feature;
 
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskStarting;
+use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Auth\User;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Exceptions;
 use Illuminate\Support\Facades\Gate;
 use LogicException;
+use Nwidart\Actuator\Actuator;
 use Nwidart\Actuator\Tests\TestCase;
 use PHPUnit\Framework\Attributes\Test;
+use RuntimeException;
 
 final class ScheduledTasksEndpointTest extends TestCase
 {
@@ -161,6 +165,29 @@ final class ScheduledTasksEndpointTest extends TestCase
         config()->set('actuator.scheduler.record', false);
 
         $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonMissingPath('cron.0.lastExecution');
+    }
+
+    #[Test]
+    public function it_adds_the_tags_of_the_callbacks_to_each_task(): void
+    {
+        Exceptions::fake();
+        $schedule = $this->app->make(Schedule::class);
+        $schedule->command('blog:digest')->hourly();
+        $schedule->call(fn () => null)->everyTenSeconds()->description('Poll');
+        $schedule->command('inspire')->daily();
+
+        Actuator::tagScheduledTasksUsing(static fn (Event $event): array => $event->description === 'Poll'
+            ? ['module' => 'Shipping']
+            : ['module' => str_contains((string) $event->command, 'blog:') ? 'Blog' : null, '' => 'dropped', 'list' => ['dropped']]);
+        Actuator::tagScheduledTasksUsing(static fn (): array => throw new RuntimeException('broken'));
+        Actuator::tagScheduledTasksUsing(static fn (Event $event): array => $event->description === 'Poll' ? ['module' => 'Tracking', 'weight' => 2] : []);
+
+        $response = $this->getJson('/actuator/scheduledtasks')->assertOk();
+
+        $this->assertSame(['module' => 'Blog'], $response->json('cron.0.tags'));
+        $this->assertSame(['module' => 'Tracking', 'weight' => 2], $response->json('fixedRate.0.tags'));
+        $response->assertJsonMissingPath('cron.1.tags');
+        Exceptions::assertReported(RuntimeException::class);
     }
 
     private function failTask(): void
