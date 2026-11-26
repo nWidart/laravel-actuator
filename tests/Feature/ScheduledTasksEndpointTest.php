@@ -190,6 +190,28 @@ final class ScheduledTasksEndpointTest extends TestCase
         Exceptions::assertReported(RuntimeException::class);
     }
 
+    #[Test]
+    public function it_drops_tags_that_are_not_finite_numbers(): void
+    {
+        $this->app->make(Schedule::class)->command('inspire')->daily();
+
+        Actuator::tagScheduledTasksUsing(static fn (): array => ['module' => 'Blog', 'inf' => INF, 'negative' => -INF, 'nan' => NAN, 'ratio' => 0.5]);
+
+        $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonPath('cron.0.tags', ['module' => 'Blog', 'ratio' => 0.5]);
+    }
+
+    #[Test]
+    public function a_failing_reporter_does_not_fail_the_endpoint(): void
+    {
+        $this->app->make(Schedule::class)->command('inspire')->daily();
+        Exceptions::reportable(static fn (RuntimeException $exception) => throw new LogicException('reporter down'));
+
+        Actuator::tagScheduledTasksUsing(static fn (): array => throw new RuntimeException('broken'));
+        Actuator::tagScheduledTasksUsing(static fn (): array => ['module' => 'Blog']);
+
+        $this->getJson('/actuator/scheduledtasks')->assertOk()->assertJsonPath('cron.0.tags', ['module' => 'Blog']);
+    }
+
     private function failTask(): void
     {
         $task = $this->app->make(Schedule::class)->command('report:send')->daily();

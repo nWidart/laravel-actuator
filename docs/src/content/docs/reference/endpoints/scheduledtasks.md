@@ -109,8 +109,8 @@ Actuator::tagScheduledTasksUsing(fn (Event $event): array => [
 }
 ```
 
-A tag value is a string, a number or a boolean. A tag with an empty name or another value is
-dropped, and so is a tag whose value is `null`. With several callbacks, a later callback replaces a
+A tag value is a string, a finite number or a boolean. A tag with an empty name or another value is
+dropped, and so is a tag whose value is `null`, `INF` or `NAN`. With several callbacks, a later callback replaces a
 tag of an earlier one. A callback that throws is reported and skipped, and the endpoint still
 answers. [nwidart/laravel-modules](https://github.com/nWidart/laravel-modules) uses this to add the
 `module` tag to the tasks a module schedules.

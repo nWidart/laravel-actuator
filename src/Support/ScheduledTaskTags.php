@@ -29,9 +29,9 @@ final class ScheduledTaskTags
     }
 
     /**
-     * The tags of one task. A callback that throws is reported and skipped. A tag with an empty
-     * name, or a value that is not a string, a number or a boolean, is dropped. A later callback
-     * replaces a tag of an earlier one.
+     * The tags of one task. A callback that throws is reported and skipped, and a failure of the
+     * report itself is ignored. A tag with an empty name, or a value that is not a string, a finite
+     * number or a boolean, is dropped. A later callback replaces a tag of an earlier one.
      *
      * @return array<non-empty-string, string|int|float|bool>
      */
@@ -43,13 +43,13 @@ final class ScheduledTaskTags
             try {
                 $contributed = $callback($event);
             } catch (Throwable $exception) {
-                report($exception);
+                rescue(static fn () => report($exception), report: false);
 
                 continue;
             }
 
             foreach ($contributed as $name => $value) {
-                if (is_string($name) && $name !== '' && is_scalar($value)) {
+                if (is_string($name) && $name !== '' && is_scalar($value) && (! is_float($value) || is_finite($value))) {
                     $tags[$name] = $value;
                 }
             }
